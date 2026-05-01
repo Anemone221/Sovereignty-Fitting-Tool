@@ -1,14 +1,72 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { evesov } from '@/api/evesov';
+import { effectsForUpgrades } from '@/data/systemEffects';
 import { useUi } from '@/state/uiStore';
-import type { PlanRollup, PlanRollupRow, PlanSummary, SystemBalance } from '@shared/index';
+import type {
+  ClearUpgradesScope,
+  PlanRollup,
+  PlanRollupRow,
+  PlanSummary,
+  SystemBalance
+} from '@shared/index';
+
+interface ContextMenuState {
+  x: number;
+  y: number;
+  scope: ClearUpgradesScope;
+  label: string;
+}
+
+const SHOW_LOCAL_TAG_KEY = 'inspector.showLocalTag';
+
+function isOverPowerOrWorkforce(s: SystemBalance): boolean {
+  return s.consumedPower > s.availablePower || s.consumedWorkforce > s.availableWorkforce;
+}
 
 export function PlanInspector() {
   const activePlanId = useUi((s) => s.activePlanId);
   const selectSystem = useUi((s) => s.selectSystem);
+  const focusPanel = useUi((s) => s.focusPanel);
   const [plan, setPlan] = useState<PlanSummary | null>(null);
   const [rollup, setRollup] = useState<PlanRollup | null>(null);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const [showLocalTag, setShowLocalTag] = useState(false);
+  const [menu, setMenu] = useState<ContextMenuState | null>(null);
+
+  useEffect(() => {
+    if (!menu) return;
+    const dismiss = () => setMenu(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenu(null);
+    };
+    window.addEventListener('mousedown', dismiss);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('blur', dismiss);
+    return () => {
+      window.removeEventListener('mousedown', dismiss);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('blur', dismiss);
+    };
+  }, [menu]);
+
+  const openMenu = useCallback(
+    (e: React.MouseEvent, scope: ClearUpgradesScope, label: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setMenu({ x: e.clientX, y: e.clientY, scope, label });
+    },
+    []
+  );
+
+  const runClear = useCallback(
+    async (scope: ClearUpgradesScope, label: string) => {
+      if (activePlanId === null) return;
+      if (!confirm(`Clear all upgrades for ${label}? This cannot be undone.`)) return;
+      await evesov.plans.clearUpgrades(activePlanId, scope);
+      setMenu(null);
+    },
+    [activePlanId]
+  );
 
   const refresh = useCallback(async () => {
     if (activePlanId === null) {
@@ -29,6 +87,18 @@ export function PlanInspector() {
     });
     return off;
   }, [refresh]);
+
+  useEffect(() => {
+    void evesov.prefs.get(SHOW_LOCAL_TAG_KEY).then((v) => setShowLocalTag(v === '1'));
+  }, []);
+
+  const toggleShowLocalTag = useCallback(() => {
+    setShowLocalTag((prev) => {
+      const next = !prev;
+      void evesov.prefs.set(SHOW_LOCAL_TAG_KEY, next ? '1' : '');
+      return next;
+    });
+  }, []);
 
   const grouped = useMemo(() => {
     if (!rollup) return [] as Array<{
@@ -57,7 +127,9 @@ export function PlanInspector() {
     );
     for (const g of arr) {
       g.systems.sort((a, b) => {
-        if (a.balanced !== b.balanced) return a.balanced ? 1 : -1;
+        const aOver = isOverPowerOrWorkforce(a);
+        const bOver = isOverPowerOrWorkforce(b);
+        if (aOver !== bOver) return aOver ? -1 : 1;
         return a.systemName.localeCompare(b.systemName);
       });
     }
@@ -82,11 +154,19 @@ export function PlanInspector() {
 
   return (
     <div className="inspector">
-      <header className="inspector__header">
+      <header
+        className="inspector__header"
+        onContextMenu={(e) => openMenu(e, { kind: 'plan' }, `plan "${plan.name}"`)}
+      >
         <h2>{plan.name}</h2>
         <span className="inspector__meta">
-          {rollup.systemBalances.length} systems · {rollup.unbalancedSystems.length} over budget
+          {rollup.systemBalances.length} systems ·{' '}
+          {rollup.systemBalances.filter(isOverPowerOrWorkforce).length} over budget
         </span>
+        <label className="inspector__pref" title="Show LOCAL badge for systems with status = local">
+          <input type="checkbox" checked={showLocalTag} onChange={toggleShowLocalTag} />
+          <span>Show LOCAL</span>
+        </label>
       </header>
       <section className="inspector__section">
         <h3>Plan totals</h3>
@@ -108,7 +188,7 @@ export function PlanInspector() {
           <div className="inspector-tree">
             {grouped.map((g) => {
               const isCollapsed = collapsed.has(g.constellationId);
-              const overCount = g.systems.filter((s) => !s.balanced).length;
+              const overCount = g.systems.filter(isOverPowerOrWorkforce).length;
               const cTotals = aggregateTotals(g.systems);
               return (
                 <div key={g.constellationId} className="inspector-tree__group">
@@ -116,6 +196,13 @@ export function PlanInspector() {
                     type="button"
                     className="inspector-tree__header"
                     onClick={() => toggleConstellation(g.constellationId)}
+                    onContextMenu={(e) =>
+                      openMenu(
+                        e,
+                        { kind: 'constellation', id: g.constellationId },
+                        `constellation ${g.constellationName}`
+                      )
+                    }
                   >
                     <span className="tree__chevron">{isCollapsed ? '▸' : '▾'}</span>
                     <span className="inspector-tree__title">
@@ -147,33 +234,65 @@ export function PlanInspector() {
                           <th className="num">Ice</th>
                           <th className="num">Gas</th>
                           <th className="num">Fuel</th>
+                          <th className="num" title="Installed / Total upgrades">Inst.</th>
                           <th></th>
                         </tr>
                       </thead>
                       <tbody>
                         {g.systems.map((s) => {
+                          const over = isOverPowerOrWorkforce(s);
                           const space = hasRemainingSpace(s);
                           return (
-                            <tr key={s.systemId} className={`inspector__row${s.balanced ? '' : ' inspector__row--over'}`}>
+                            <tr
+                              key={s.systemId}
+                              className={`inspector__row${over ? ' inspector__row--over' : ''}`}
+                              onContextMenu={(e) =>
+                                openMenu(e, { kind: 'system', id: s.systemId }, s.systemName)
+                              }
+                            >
                               <td>
-                                <span className={`inspector__dot${s.balanced ? '' : ' inspector__dot--over'}`} />
+                                <span className={`inspector__dot${over ? ' inspector__dot--over' : ''}`} />
                               </td>
                               <td>
-                                <button className="inspector__system" type="button" onClick={() => selectSystem(s.systemId)}>
+                                <button
+                                  className="inspector__system"
+                                  type="button"
+                                  onClick={() => {
+                                    selectSystem(s.systemId);
+                                    focusPanel('system');
+                                  }}
+                                >
                                   {s.systemName}
                                 </button>
+                                {effectsForUpgrades(s.upgrades).map((eff) => (
+                                  <span
+                                    key={eff.label}
+                                    className="effect-badge"
+                                    title={`${eff.label}: ${eff.description}`}
+                                  >
+                                    {eff.symbol}
+                                  </span>
+                                ))}
                                 {s.status !== 'local' && (
                                   <span className={`status-tag status-tag--${s.status}`} title={`Workforce: ${s.status}`}>
                                     {s.status}
                                   </span>
                                 )}
+                                {s.status === 'local' && showLocalTag && (
+                                  <span className="status-tag status-tag--local" title="Workforce: local">
+                                    local
+                                  </span>
+                                )}
                               </td>
                               <td>
-                                {s.balanced && space && (
-                                  <span className="inspector__space" title="Has remaining capacity for more upgrades">+</span>
+                                {space && (
+                                  <span className="inspector__space" title="Has remaining power and workforce for more upgrades">+</span>
                                 )}
                               </td>
                               <BalanceCells b={s} />
+                              <td className={`num inspector__installed${s.totalCount > 0 && s.installedCount === s.totalCount ? ' inspector__installed--complete' : ''}`}>
+                                {s.totalCount > 0 ? `${s.installedCount}/${s.totalCount}` : '—'}
+                              </td>
                               <td>
                                 <button
                                   type="button"
@@ -181,7 +300,7 @@ export function PlanInspector() {
                                   onClick={() => {
                                     if (
                                       confirm(
-                                        `Remove ${s.systemName} from plan? This clears its upgrades and any direct system scope (parent region/constellation scopes are unaffected).`
+                                        `Remove ${s.systemName} from plan view? Its assigned upgrades are kept (use "Clear upgrades" to delete them).`
                                       )
                                     ) {
                                       void evesov.plans.removeSystem(activePlanId, s.systemId);
@@ -205,17 +324,27 @@ export function PlanInspector() {
           </div>
         )}
       </section>
+      {menu && (
+        <div
+          className="context-menu"
+          style={{ top: menu.y, left: menu.x }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="context-menu__item"
+            onClick={() => void runClear(menu.scope, menu.label)}
+          >
+            Clear upgrades for {menu.label}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 function hasRemainingSpace(s: SystemBalance): boolean {
-  return (
-    s.consumedPower < s.availablePower ||
-    s.consumedWorkforce < s.availableWorkforce ||
-    s.consumedIce < s.availableIce ||
-    s.consumedGas < s.availableGas
-  );
+  return s.consumedPower < s.availablePower && s.consumedWorkforce < s.availableWorkforce;
 }
 
 interface ConstellationTotals {

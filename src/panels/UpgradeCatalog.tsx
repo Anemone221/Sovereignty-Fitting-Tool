@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { evesov } from '@/api/evesov';
+import { effectFor } from '@/data/systemEffects';
 import type { Upgrade } from '@shared/index';
 
 export function UpgradeCatalog() {
@@ -35,19 +36,32 @@ export function UpgradeCatalog() {
               <th className="num">Ice</th>
               <th className="num">Gas</th>
               <th className="num">Startup fuel</th>
+              <th>Effect</th>
             </tr>
           </thead>
           <tbody>
-            {visible.map((u) => (
-              <tr key={u.name}>
-                <td>{u.name}</td>
-                <td className={costClass(u.power)}>{fmt(u.power)}</td>
-                <td className={costClass(u.workforce)}>{fmt(u.workforce)}</td>
-                <td className={costClass(u.superionicIce)}>{fmt(u.superionicIce)}</td>
-                <td className={costClass(u.magmaticGas)}>{fmt(u.magmaticGas)}</td>
-                <td className="num">{fmt(u.startup)}</td>
-              </tr>
-            ))}
+            {visible.map((u) => {
+              const eff = effectFor(u.name);
+              return (
+                <tr key={u.name}>
+                  <td>{u.name}</td>
+                  <td className={costClass(u.power)}>{fmt(u.power)}</td>
+                  <td className={costClass(u.workforce)}>{fmt(u.workforce)}</td>
+                  <td className={costClass(u.superionicIce)}>{fmt(u.superionicIce)}</td>
+                  <td className={costClass(u.magmaticGas)}>{fmt(u.magmaticGas)}</td>
+                  <td className="num">{fmt(u.startup)}</td>
+                  <td>
+                    {eff ? (
+                      <span className="effect-badge" title={eff.description}>
+                        {eff.symbol} {eff.label}
+                      </span>
+                    ) : (
+                      ''
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {visible.length === 0 && upgrades.length > 0 && (

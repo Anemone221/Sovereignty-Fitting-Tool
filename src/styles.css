@@ -312,7 +312,9 @@ table.grid td.cost-produces { color: var(--ok); }
 .plans__empty { padding: 12px; color: var(--fg-mute); list-style: none; }
 
 /* Plan inspector */
-.inspector { padding: 16px 24px; }
+.inspector { padding: 16px 24px; height: 100%; overflow-y: auto; box-sizing: border-box; }
+.inspector__pref { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--fg-dim); cursor: pointer; }
+.inspector__pref input { margin: 0; }
 .inspector--empty { padding: 16px 24px; color: var(--fg-mute); }
 .inspector__header { margin-bottom: 16px; display: flex; align-items: baseline; gap: 12px; }
 .inspector__header h2 { margin: 0; font-size: 18px; }
@@ -446,6 +448,49 @@ table.grid td.cost-produces { color: var(--ok); }
 .status-tag--export  { color: #58a6ff; background: rgba(88,166,255,0.12); }
 .status-tag--import  { color: var(--ok);  background: rgba(63,185,80,0.12); }
 .status-tag--transit { color: #f0b429;    background: rgba(240,180,41,0.14); }
+.status-tag--local   { color: var(--fg-dim); background: rgba(255,255,255,0.06); }
+
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 0;
+  min-width: 200px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+.context-menu__item {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+}
+.context-menu__item:hover { background: var(--bg-elev-3, rgba(255,255,255,0.06)); }
+
+.effect-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(168, 122, 255, 0.14);
+  color: #c8a4ff;
+  font-size: 11px;
+  cursor: help;
+}
+.effect-badge--lg { font-size: 12px; padding: 2px 8px; }
+
+.inspector__installed { color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+.inspector__installed--complete { color: var(--ok); }
+.row-installed td { color: var(--fg-dim); }
+.row-installed td:first-child { color: var(--ok); }
 
 .matrix__system-name-row { display: flex; align-items: center; flex-wrap: wrap; }
 

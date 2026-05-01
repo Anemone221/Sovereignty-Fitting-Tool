@@ -1,5 +1,6 @@
 import { evesov } from '@/api/evesov';
 import { aggregateGrants, formatGrants, siteEffectsFor } from '@/data/effects';
+import { effectsForUpgrades } from '@/data/systemEffects';
 import { useUi } from '@/state/uiStore';
 import type {
     PlanUpgradeRow,
@@ -174,6 +175,15 @@ export function SystemDetail() {
       <header className="detail__header">
         <div className="detail__title-row">
           <h2>{system.name}</h2>
+          {effectsForUpgrades(assigned.map((a) => a.upgradeName)).map((eff) => (
+            <span
+              key={eff.label}
+              className="effect-badge effect-badge--lg"
+              title={`${eff.label}: ${eff.description}`}
+            >
+              {eff.symbol} {eff.label}
+            </span>
+          ))}
           {activePlanId !== null && budget.sovEligible && (
             <label className={`status-pill status-pill--${balance?.status ?? 'local'}`} title="Workforce status in this plan">
               <span className="status-pill__dot" />
@@ -320,6 +330,7 @@ export function SystemDetail() {
           <table className="grid">
             <thead>
               <tr>
+                <th title="Installed">Inst.</th>
                 <th>Name</th>
                 <th className="num">Power</th>
                 <th className="num">Workforce</th>
@@ -334,7 +345,24 @@ export function SystemDetail() {
                 const u = upgradeMap.get(a.upgradeName);
                 const grants = siteEffectsFor(a.upgradeName, sec);
                 const rows = [
-                  <tr key={a.upgradeName}>
+                  <tr key={a.upgradeName} className={a.installed ? 'row-installed' : ''}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={a.installed}
+                        onChange={(e) => {
+                          if (activePlanId === null) return;
+                          void evesov.plans.setUpgradeInstalled(
+                            activePlanId,
+                            systemId,
+                            a.upgradeName,
+                            e.target.checked
+                          );
+                        }}
+                        title={a.installed ? 'Installed' : 'Todo — mark installed'}
+                        aria-label={`Mark ${a.upgradeName} installed`}
+                      />
+                    </td>
                     <td>{a.upgradeName}</td>
                     <td className={`num${u && u.power < 0 ? ' cost-produces' : ''}`}>{u?.power.toLocaleString() ?? '—'}</td>
                     <td className={`num${u && u.workforce < 0 ? ' cost-produces' : ''}`}>{u?.workforce.toLocaleString() ?? '—'}</td>
@@ -358,7 +386,7 @@ export function SystemDetail() {
                 if (grants.length > 0) {
                   rows.push(
                     <tr key={`${a.upgradeName}-grants`} className="row-grants">
-                      <td colSpan={7} className="row-grants__cell">→ {formatGrants(grants)}</td>
+                      <td colSpan={8} className="row-grants__cell">→ {formatGrants(grants)}</td>
                     </tr>
                   );
                 }
