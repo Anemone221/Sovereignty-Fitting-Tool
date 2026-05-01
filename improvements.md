@@ -26,13 +26,17 @@ Below will be per section improvements I want to complete:
 - Add check box for "transfer remainder"
 - If system does not produce a resource such as superionic or magmatic set the bar to empty
 - Add Jump bridge system
-  - If Advanced Logistics Network exists require it to be linked to another system. You will have a drop down able to select from other systems in range.
-    - Range Calculation is done by: "(((sqrt((($a['x']-$b['x'])_($a['x']-$b['x']))+(($a['y']-$b['y'])_($a['y']-$b['y']))+(($a['z']-$b['z'])\*($a['z']-$b['z']))))/149597870691)/63239.6717)"
-    - Give Check box for Manual entry, Auto complete system names. (Allows cross alliance Ansi's)
+    - If Advanced Logistics Network exists require it to be linked to another system. You will have a drop down able to select from other systems in range.
+        - Range Calculation is done by: "(((sqrt((($a['x']-$b['x'])_($a['x']-$b['x']))+(($a['y']-$b['y'])_($a['y']-$b['y']))+(($a['z']-$b['z'])\*($a['z']-$b['z']))))/149597870691)/63239.6717)"
+        - Give Check box for Manual entry, Auto complete system names. (Allows cross alliance Ansi's)
+- Todo/Installed list of upgrades for system
 
-> QOL
+    > QOL
 
 - Add symbols for Cyno beacon, Cyno Jammer, Supercaptial Production, Advanced Logistics Network
+- Add symbols for System effects from effect generators. Also give effect
+- Recognize default collapse behaviour of star and planets.
+- Add rat types under Star, requires adding Rat types to each regional area with null-sec
 
 > Feature Add
 
@@ -41,25 +45,35 @@ Below will be per section improvements I want to complete:
 - Allow us to calculate available PI materials for a system.
 
 - Structure System
-  - Import from clipboard button to allow that structure export from game or pyfa and the program generates a small card for the station.
-  - Ansiblex upgrades auto generate a card for the relevant structure that gets added to the system from having that upgrade
-  - Add a drop down to manually add a structure to the plan (mainly for metenox's but can also manually add a structure). These will be rigless stations.
-  - Allow input location of stations in locality. (Deep, Planet, Moon, Gate, Ansiblex)
-  - For Metenox and Athanors/Tatara
-    - If Moon scans exist and external Data Sync is enabled calculate profitablility of Moon for Metenox
-    - If Moon scans exist and external Data Sync is enabled calculate profitablility of Moon per hour of Drilling for Athanor/tatara
-  - If Sotiyo in system Check if system has Supercapital building, if True add a Sotiyo Flag to the system Title and update universe with a sotiyo symbol also.
+    - Import from clipboard button to allow that structure export from game or pyfa and the program generates a small card for the station.
+    - Ansiblex upgrades auto generate a card for the relevant structure that gets added to the system from having that upgrade
+    - Add a drop down to manually add a structure to the plan (mainly for metenox's but can also manually add a structure). These will be rigless stations.
+    - Allow input location of stations in locality. (Deep, Planet, Moon, Gate, Ansiblex)
+    - For Metenox and Athanors/Tatara
+        - If Moon scans exist and external Data Sync is enabled calculate profitablility of Moon for Metenox
+        - If Moon scans exist and external Data Sync is enabled calculate profitablility of Moon per hour of Drilling for Athanor/tatara
+    - If Sotiyo in system Check if system has Supercapital building, if True add a Sotiyo Flag to the system Title and update universe with a sotiyo symbol also.
 
 ## Plans
 
 > Necessary
 
+- Add scrollable Interface
 - add 2 columns, one for date created, other for date modified
 - Add location column: Tells us what region the sov we are planning exists.
+- When you remove a constelation from universe remove from plan
+- Ability to clear all upgrades
+- when click on a system in plan window, focus the system window.
+- Plus in plan should not include workforce or power monetoring in its criteria (rework logic of hasRemaningSpace in plan inspector )
 
 > QOL
 
+    - Add symbols for System effects from effect generators. Also give effect
+    - Add Local tag for Systems if they are not importing or exporting.
+
 > Feature Add
+
+- Todo/Installed list of upgrades for system
 
 ## Inspector
 
@@ -78,9 +92,11 @@ Below will be per section improvements I want to complete:
 > Necessary
 
 - Add check boxes at the top of the page to allow you to check and uncheck formatting.
-  - Add ability to color System names based on resource usage.
-  - Add ability to add upgrade symbols for systems
-  - Add ability to swap from 45 degree names to 90 degree names
+    - Add ability to color System names based on resource usage.
+    - Add ability to add upgrade symbols for systems
+    - Add ability to swap from 45 degree names to 90 degree names
+    - Add ability to remove unused upgrades
+    - Todo/Installed list of upgrades for system
 
 > QOL
 
@@ -95,9 +111,9 @@ Below will be per section improvements I want to complete:
 > Necessary
 
 - Add check boxes at the top of the page to allow you to check and uncheck formatting.
-  - Add ability to color System names based on resource usage.
-  - Add ability to add upgrade symbols for systems
-  - Add ability to swap from 45 degree names to 90 degree names
+    - Add ability to color System names based on resource usage.
+    - Add ability to add upgrade symbols for systems
+    - Add ability to swap from 45 degree names to 90 degree names
 
 > QOL
 
@@ -115,7 +131,7 @@ Below will be per section improvements I want to complete:
 > QOL
 
 - Add check box at top of page for tree view or no tree view. In no tree view add column for upgrade tyep.
-  > Feature Add
+    > Feature Add
 
 # Planned Pages
 
@@ -127,8 +143,8 @@ Below will be per section improvements I want to complete:
 - Export Sites as PNG
 - Export Maps
 - Configure Export information
-  - Allows for OP-sec of senstive information
-  - Allows to export map's/images of specific information.
+    - Allows for OP-sec of senstive information
+    - Allows to export map's/images of specific information.
 - **DNA** export. Ala PYFA export to allow us to import a plan for someone else to allow them to pick up from where you are at.
 
 > QOL
@@ -153,8 +169,8 @@ Below will be per section improvements I want to complete:
 > Necessary
 
 - Add system to allow the storage of moon scan data
-  > QOL
-  > Feature Add
+    > QOL
+    > Feature Add
 
 ## Data Sync System
 
@@ -164,3 +180,21 @@ Below will be per section improvements I want to complete:
 
 > QOL
 > Feature Add
+
+# Settings
+
+> Necessary
+
+- Color Pallete's
+    > QOL
+    > Feature Add
+
+# Data Management
+
+> Necessary
+
+- Allow user to manage the data they are working with, this is to allow the user to update upgrade values, import updated SDE changes, modify powergrid and work force if necessary
+- Purge Market Data if Data sync is activated
+- Purge other information
+    > QOL
+    > Feature Add
