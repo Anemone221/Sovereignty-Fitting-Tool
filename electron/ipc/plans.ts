@@ -522,15 +522,28 @@ export function registerPlansIpc(): void {
 
     const upgradeRows = db
       .prepare(
-        'SELECT system_id, upgrade_name FROM plan_upgrades WHERE plan_id = ? ORDER BY system_id, ordering, upgrade_name'
+        'SELECT system_id, upgrade_name, installed FROM plan_upgrades WHERE plan_id = ? ORDER BY system_id, ordering, upgrade_name'
       )
-      .all(planId) as Array<{ system_id: number; upgrade_name: string }>;
+      .all(planId) as Array<{ system_id: number; upgrade_name: string; installed: number }>;
 
-    const upgradesBySystem = new Map<number, string[]>();
+    const upgradesBySystem = new Map<number, { name: string; installed: boolean }[]>();
     for (const u of upgradeRows) {
       const arr = upgradesBySystem.get(u.system_id) ?? [];
-      arr.push(u.upgrade_name);
+      arr.push({ name: u.upgrade_name, installed: u.installed === 1 });
       upgradesBySystem.set(u.system_id, arr);
+    }
+
+    const balanceRows = db.prepare(BALANCE_SQL_FOR_PLAN).all({ planId }) as RollupDbRow[];
+    const usageBySystem = new Map<number, { power: number; workforce: number; ice: number; gas: number }>();
+    for (const b of balanceRows) {
+      const ratio = (consumed: number, available: number) =>
+        available > 0 ? consumed / available : consumed > 0 ? Infinity : 0;
+      usageBySystem.set(b.system_id, {
+        power: ratio(b.consumed_power, b.available_power),
+        workforce: ratio(b.consumed_workforce, b.available_workforce),
+        ice: ratio(b.consumed_ice, b.available_ice),
+        gas: ratio(b.consumed_gas, b.available_gas)
+      });
     }
 
     const systems: PlanMatrixSystem[] = sysRows.map((r) => ({
@@ -542,7 +555,8 @@ export function registerPlansIpc(): void {
       regionName: r.region_name,
       securityStatus: r.security_status,
       status: r.status,
-      upgrades: upgradesBySystem.get(r.id) ?? []
+      upgrades: upgradesBySystem.get(r.id) ?? [],
+      usage: usageBySystem.get(r.id) ?? { power: 0, workforce: 0, ice: 0, gas: 0 }
     }));
 
     return { systems };

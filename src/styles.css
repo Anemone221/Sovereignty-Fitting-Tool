@@ -661,6 +661,44 @@ thead .matrix__sticky-col { z-index: 3; background: var(--bg-elev); }
 .matrix__col-total { color: var(--accent) !important; font-weight: 600; }
 .matrix__cell.matrix__col-total { width: 40px; min-width: 40px; }
 
+/* Vertical header variant: 90° rotation, shorter row */
+.matrix__headers-cell--vertical { height: 120px; }
+.matrix__headers-row--vertical { height: 120px; }
+.matrix__col-text--vertical {
+  transform: rotate(-90deg);
+  bottom: 6px;
+  left: 50%;
+  transform-origin: 0 0;
+}
+.matrix--vertical .matrix__totals-row th { top: 120px; }
+.matrix__corner--vertical { height: 120px; }
+
+/* Heat coloring on system-name cell (3-step) */
+.matrix__system-cell--heat-ok   { background: rgba(64, 160, 96, 0.18) !important; }
+.matrix__system-cell--heat-warn { background: rgba(200, 160, 64, 0.22) !important; }
+.matrix__system-cell--heat-over { background: rgba(200, 64, 64, 0.28) !important; }
+
+/* Format bar (shared) */
+.format-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.format-bar__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.format-bar__option input { margin: 0; }
+.format-bar__actions {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
 /* Collapsible section header in System detail */
 .detail__section-toggle {
   display: flex;

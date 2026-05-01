@@ -13,8 +13,8 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
-    "rebuild": "electron-rebuild -f -w better-sqlite3",
-    "postinstall": "electron-rebuild -f -w better-sqlite3"
+    "rebuild": "node node_modules/@electron/rebuild/lib/cli.js -f -w better-sqlite3",
+    "postinstall": "node node_modules/@electron/rebuild/lib/cli.js -f -w better-sqlite3"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
@@ -22,12 +22,14 @@
     "@tanstack/react-table": "^8.21.3",
     "better-sqlite3": "^12.4.0",
     "dockview-react": "^4.5.1",
+    "html2canvas": "^1.4.1",
     "papaparse": "^5.5.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^5.0.6"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.13.0",
@@ -35,9 +37,8 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^34.0.0",
-    "electron-builder": "^25.1.8",
-    "electron-rebuild": "^3.2.9",
+    "electron": "^41.4.0",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^3.0.0",
     "eslint": "^10.2.1",
     "tsx": "^4.19.2",

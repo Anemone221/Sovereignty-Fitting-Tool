@@ -16,6 +16,13 @@ export function runMigrations(db: DB, seedPath?: string): void {
     db.exec('ALTER TABLE plan_system_status ADD COLUMN export_all_unused INTEGER NOT NULL DEFAULT 0');
   }
 
+  const upgradeCols = (
+    db.prepare('PRAGMA table_info(plan_upgrades)').all() as { name: string }[]
+  ).map((r) => r.name);
+  if (!upgradeCols.includes('installed')) {
+    db.exec('ALTER TABLE plan_upgrades ADD COLUMN installed INTEGER NOT NULL DEFAULT 0');
+  }
+
   // Populate system_adjacency from seed.db if this user DB has none (e.g. copied before
   // stargates were seeded). Uses ATTACH so no JSONL re-import is needed at runtime.
   const adjCount = (db.prepare('SELECT COUNT(*) AS n FROM system_adjacency').get() as { n: number }).n;

@@ -100,7 +100,7 @@ Below will be per section improvements I want to complete:
 
 > QOL
 
-- Investigate stickiy for totals
+- Investigate sticky for totals
 
 > Feature Add
 

@@ -199,6 +199,9 @@ export interface EveSovApi {
     openPanel: (panelId: string, params?: Record<string, unknown>) => Promise<number>;
     dockBack: (windowId: number) => Promise<void>;
   };
+  exports: {
+    capturePng: (filename: string, dataUrl: string) => Promise<{ saved: boolean; path?: string }>;
+  };
   events: {
     on: (channel: 'plan-changed' | 'data-refreshed', listener: (payload: unknown) => void) => () => void;
   };
@@ -244,6 +247,18 @@ export interface PlanRollup {
   };
 }
 
+export interface PlanMatrixUpgrade {
+  name: string;
+  installed: boolean;
+}
+
+export interface PlanMatrixUsage {
+  power: number;
+  workforce: number;
+  ice: number;
+  gas: number;
+}
+
 export interface PlanMatrixSystem {
   id: number;
   name: string;
@@ -253,7 +268,8 @@ export interface PlanMatrixSystem {
   regionName: string;
   securityStatus: number | null;
   status: SystemStatus;
-  upgrades: string[];
+  upgrades: PlanMatrixUpgrade[];
+  usage: PlanMatrixUsage;
 }
 
 export interface PlanMatrix {

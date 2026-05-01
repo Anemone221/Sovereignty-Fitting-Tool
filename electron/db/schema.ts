@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS plan_upgrades (
   upgrade_name  TEXT    NOT NULL REFERENCES upgrades(name),
   ordering      INTEGER NOT NULL DEFAULT 0,
   notes         TEXT,
+  installed     INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (plan_id, system_id, upgrade_name)
 );
 

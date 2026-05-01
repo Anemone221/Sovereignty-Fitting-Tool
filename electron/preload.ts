@@ -50,6 +50,9 @@ const api: EveSovApi = {
     openPanel: (panelId, params) => ipcRenderer.invoke('windows.openPanel', panelId, params),
     dockBack: (windowId) => ipcRenderer.invoke('windows.dockBack', windowId)
   },
+  exports: {
+    capturePng: (filename, dataUrl) => ipcRenderer.invoke('exports.capturePng', filename, dataUrl)
+  },
   events: {
     on: (channel, listener) => {
       const wrapped = (_: unknown, payload: unknown) => listener(payload);

@@ -10,10 +10,9 @@ Reads via IPC only. Backed by `plan_scopes`, `plan_upgrades` (including `install
 
 ## IPC
 
-- `plans.matrix(planId)` → `{ systems: PlanMatrixSystem[] }`. Each system carries constellation/region names, sec status, workforce status, assigned upgrade names, and per-upgrade `installed` flags. Extended to include per-resource usage ratios for color-coding.
-- `plans.summary(planId)` — fetched in parallel to provide resource usage ratios per system (for color-system-names formatting option).
+- `plans.matrix(planId)` → `{ systems: PlanMatrixSystem[] }`. Each system carries constellation/region names, sec status, workforce status, assigned `upgrades: { name, installed }[]`, and a `usage: { power, workforce, ice, gas }` ratio object (consumed/available; `Infinity` when consumed > 0 with no available; `0` when both 0). Resource ratios are computed inline using the same balance SQL as `plans.summary`.
 - `data.upgrades` — all upgrades, used to drive the column set.
-- `exports.capturePng(filename)` — triggers PNG export (see Exports.md).
+- `exports.capturePng(filename, dataUrl)` — triggers PNG export (renderer-side `html2canvas` → main-side save dialog + write).
 - Subscribes to `plan-changed` for live updates.
 
 ## Critical files
@@ -29,12 +28,12 @@ Reads via IPC only. Backed by `plan_scopes`, `plan_upgrades` (including `install
 - The system column is sticky on the left with the system name stacked over `<constellation> / <region>`.
 - The "Totals" row sticks at `top: 180px`. If sticking breaks, the likely cause is the `overflow: auto` scroll context — verify `border-collapse: separate` is set and the sticky parent is the scroll container, not a wrapper.
 - **Formatting bar** (checkboxes, persisted as prefs with `matrix.fmt.*` keys):
-  - `colorSystems` — system name cell background colour reflects worst-resource usage ratio (green → red); requires `plans.summary` data.
-  - `upgradeSymbols` — show compact symbols from `upgradeSymbols.ts` in column headers.
-  - `verticalHeaders` — toggle 45° ↔ 90° header angle.
+  - `colorSystems` — system name cell background colour reflects worst-resource usage ratio across {power, workforce, ice, gas}. 3-step palette: green ≤80%, yellow 80–100%, red >100%. Driven by `usage` ratios returned inline from `plans.matrix`.
+  - `upgradeSymbols` — show compact symbols from `src/data/upgradeSymbols.ts` in column headers. Mapping is currently empty (falls back to full upgrade name); intended to be populated later.
+  - `verticalHeaders` — toggle 45° ↔ 90° header angle (header row height 180 px ↔ 120 px; totals-row sticky `top` follows).
   - `hideUnused` — filter `allUpgrades` to those with `totals > 0`.
-  - `showInstalled` — render installed (●) vs todo (○) glyphs in cells instead of a uniform dot.
-- **PNG export**: renderer-side `html2canvas` captures the matrix `<div>`, converts to a data URL, sends to main via `exports.capturePng`; main shows `dialog.showSaveDialog` and writes the file. Opsec config (hide names) is applied before capture (see Exports.md).
+  - `showInstalled` — render installed (●) vs todo (○) glyphs in cells instead of a uniform dot. Backed by `plan_upgrades.installed` (added via migration).
+- **PNG export**: renderer-side `html2canvas` captures the matrix `<div>`, converts to a data URL, sends to main via `exports.capturePng(filename, dataUrl)`; main shows `dialog.showSaveDialog` and writes the file. Opsec redaction (hide names, watermark) is **not yet implemented** — see Exports.md for the planned config layer.
 - `html2canvas` is added as a dependency. It is renderer-only — no ABI concerns.
 
 ## Open questions / next steps

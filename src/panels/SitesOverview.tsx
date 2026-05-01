@@ -49,7 +49,7 @@ export function SitesOverview() {
       .map((s) => {
         const sites = new Map<string, number>();
         for (const upg of s.upgrades) {
-          for (const g of siteEffectsFor(upg, s.securityStatus)) {
+          for (const g of siteEffectsFor(upg.name, s.securityStatus)) {
             sites.set(g.site, (sites.get(g.site) ?? 0) + g.count);
             colSet.add(g.site);
           }
