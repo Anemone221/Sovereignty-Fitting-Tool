@@ -105,7 +105,13 @@ export interface PlanUpgradeRow {
   upgradeName: string;
   ordering: number;
   notes: string | null;
+  installed: boolean;
 }
+
+export type ClearUpgradesScope =
+  | { kind: 'plan' }
+  | { kind: 'constellation'; id: number }
+  | { kind: 'system'; id: number };
 
 export interface AssignResult {
   ok: boolean;
@@ -187,6 +193,13 @@ export interface EveSovApi {
     removeUpgrade: (planId: number, systemId: number, upgradeName: string) => Promise<void>;
     removeSystem: (planId: number, systemId: number) => Promise<void>;
     setSystemStatus: (planId: number, systemId: number, status: SystemStatus) => Promise<void>;
+    setUpgradeInstalled: (
+      planId: number,
+      systemId: number,
+      upgradeName: string,
+      installed: boolean
+    ) => Promise<void>;
+    clearUpgrades: (planId: number, scope: ClearUpgradesScope) => Promise<void>;
     systemBalance: (planId: number, systemId: number) => Promise<SystemBalance | null>;
     summary: (planId: number) => Promise<PlanRollup>;
     matrix: (planId: number) => Promise<PlanMatrix>;
@@ -228,6 +241,9 @@ export interface PlanRollupRow extends SystemBalance {
   regionId: number;
   regionName: string;
   securityStatus: number | null;
+  upgrades: string[];
+  installedCount: number;
+  totalCount: number;
 }
 
 export interface PlanRollup {

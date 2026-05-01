@@ -40,6 +40,7 @@ Writes via IPC; never touches SQLite directly.
 - `src/panels/SystemDetail.tsx` — the panel itself, including the `BudgetBar` component, status pill, collapsible sections, and the Available-upgrades filter.
 - `src/data/effects.ts` — `siteEffectsFor(upgradeName, sec)` and `aggregateGrants`.
 - `src/data/upgradeSymbols.ts` — upgrade name → symbol/abbreviation map (Cyno Beacon, Cyno Jammer, Supercapital Production, ALN; also abbreviations like `Mjr.3`).
+- `src/data/systemEffects.ts` — Stability Generator → wormhole-style effect badge (symbol + label + description). Used in the SystemDetail header, PlanInspector row, and Upgrade catalog.
 - `src/data/piMaterials.ts` — static planet type → P0 PI materials mapping.
 - `electron/ipc/plans.ts` — `plans.systemBalance`, `plans.assignUpgrade`, `plans.removeUpgrade`, `plans.setSystemStatus`, `plans.setUpgradeInstalled`, `plans.setJumpBridgeLink`, `plans.getJumpBridgeLinks`.
 - `electron/ipc/data.ts` — `data.system`, `data.systemsInRange`.
@@ -53,7 +54,7 @@ Writes via IPC; never touches SQLite directly.
 - **Workforce transfer**: the amount field is a `<input type="number">` inline in the status pill area; a "transfer remainder" checkbox disables it and auto-fills with `available - consumed`. Validation (amount ≤ remainder) shows a red border + error `<span>` beneath the input — no `window.prompt()`.
 - **Jump bridge link**: the ALN link section appears only when ALN is in the assigned list. Uses a `<select>` populated from `data.systemsInRange`; a text filter above the `<select>` narrows the list. Manual-entry checkbox enables free-text with system name autocomplete (bypasses range check; `is_manual = 1`). ALN removal deletes the link row.
 - **Range formula**: `distanceLY = sqrt((ax-bx)²+(ay-by)²+(az-bz)²) / 149597870691 / 63239.6717`. Cap is 5 LY. Computed in the main process via `data.systemsInRange` (SQL math on `systems.x/y/z`).
-- **Upgrade installed/todo**: a checkbox or ✓ button on each assigned upgrade row. `installed = 0` is default so existing rows are treated as todo without migration. Migration guard pattern: `PRAGMA table_info` check before `ALTER TABLE ADD COLUMN`.
+- **Upgrade installed/todo**: a checkbox in the leading "Inst." column toggles `plan_upgrades.installed`. `installed = 0` is the default so existing rows are treated as todo. Migration guard: `PRAGMA table_info(plan_upgrades)` check + `ALTER TABLE ADD COLUMN` in `electron/db/connection.ts`. Inspector shows the per-system `installed/total` count, green when complete.
 - **Symbols**: derived at render time from the assigned upgrade list via `upgradeSymbols.ts`. No DB storage. Appear as a symbol row in the system header.
 - **Rat types**: shown under Star only when `security_status < 0`. The `rat_type` column on `regions` is seeded from a static region→rat mapping in the seed script. Null in empire/WH space.
 - **Planet type**: displayed in the planet name column (e.g. "Jita IV - Lava"). Seeded from SDE JSONL `planetTypes` data into `planets.planet_type`.
