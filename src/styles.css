@@ -121,9 +121,34 @@ input[type="search"]:focus { border-color: var(--accent); }
   height: 100%;
   min-height: 0;
 }
-.tree__filter {
-  margin: 8px;
+.tree__filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  flex-wrap: wrap;
 }
+.tree__filter {
+  flex: 1;
+  min-width: 140px;
+}
+.tree__toggle {
+  font-size: 10px;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--fg-mute);
+  background: transparent;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tree__toggle:hover:not(:disabled) { color: var(--fg); border-color: var(--fg-dim); }
+.tree__toggle--on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(88, 166, 255, 0.08);
+}
+.tree__toggle:disabled { opacity: 0.4; cursor: not-allowed; }
 .tree__body {
   flex: 1;
   overflow: auto;
@@ -149,6 +174,22 @@ input[type="search"]:focus { border-color: var(--accent); }
 }
 .tree__row--region .tree__expand    { padding-left: 8px; font-weight: 600; color: var(--fg); }
 .tree__row--constellation .tree__expand { padding-left: 22px; color: var(--fg-dim); }
+.tree__group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 1px 8px 1px 32px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-mute);
+  text-align: left;
+}
+.tree__group-header:hover { background: var(--bg-elev-2); color: var(--fg-dim); }
+.tree__group--claimed   .tree__group-label { color: var(--ok); }
+.tree__group--unclaimed .tree__group-label { color: var(--fg-dim); }
+.tree__group--other     .tree__group-label { color: var(--fg-mute); }
 .tree__row--system    { padding-left: 40px; color: var(--fg); }
 .tree__row--non-sov   { color: var(--fg-mute); }
 .tree__row--active    { background: rgba(88, 166, 255, 0.18); color: var(--accent); }
@@ -184,6 +225,18 @@ input[type="search"]:focus { border-color: var(--accent); }
   background: transparent;
 }
 .tree__scope:disabled { cursor: not-allowed; opacity: 0.5; }
+.tree__explode {
+  width: 20px;
+  height: 18px;
+  border-radius: 3px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--fg-mute);
+  border: 1px solid transparent;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+.tree__explode:hover { color: var(--accent); border-color: var(--accent); }
 .tree__chevron {
   display: inline-block;
   width: 10px;
@@ -193,6 +246,10 @@ input[type="search"]:focus { border-color: var(--accent); }
   margin-left: auto;
   font-size: 10px;
   color: var(--fg-mute);
+  font-variant-numeric: tabular-nums;
+}
+.tree__count--full {
+  color: var(--ok);
 }
 .tree__sec {
   display: inline-block;
@@ -201,6 +258,12 @@ input[type="search"]:focus { border-color: var(--accent); }
   font-variant-numeric: tabular-nums;
   color: var(--fg-mute);
   font-size: 11px;
+}
+.tree__capital {
+  color: #f0b429;
+  font-size: 12px;
+  line-height: 1;
+  margin-right: 2px;
 }
 .tree__empty {
   padding: 12px;
@@ -326,6 +389,23 @@ table.grid td.cost-produces { color: var(--ok); }
 .inspector__dot--over { background: var(--danger); }
 .inspector__system { color: var(--accent); padding: 0; text-align: left; }
 .inspector__system:hover { text-decoration: underline; }
+.inspector__remove-confirm {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.inspector__remove-confirm .btn-icon {
+  width: auto;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.inspector__remove-yes {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.inspector__remove-yes:hover:not(:disabled) {
+  background: rgba(248, 81, 73, 0.12);
+}
 
 /* Budget bar (in SystemDetail) */
 .budget { margin-bottom: 8px; }

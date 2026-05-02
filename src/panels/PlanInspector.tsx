@@ -32,6 +32,7 @@ export function PlanInspector() {
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [showLocalTag, setShowLocalTag] = useState(false);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const [removingSystemId, setRemovingSystemId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!menu) return;
@@ -294,23 +295,40 @@ export function PlanInspector() {
                                 {s.totalCount > 0 ? `${s.installedCount}/${s.totalCount}` : '—'}
                               </td>
                               <td>
-                                <button
-                                  type="button"
-                                  className="btn-icon btn-icon--danger"
-                                  onClick={() => {
-                                    if (
-                                      confirm(
-                                        `Remove ${s.systemName} from plan view? Its assigned upgrades are kept (use "Clear upgrades" to delete them).`
-                                      )
-                                    ) {
-                                      void evesov.plans.removeSystem(activePlanId, s.systemId);
-                                    }
-                                  }}
-                                  title={`Remove ${s.systemName}`}
-                                  aria-label={`Remove ${s.systemName}`}
-                                >
-                                  ×
-                                </button>
+                                {removingSystemId === s.systemId ? (
+                                  <span className="inspector__remove-confirm">
+                                    <button
+                                      type="button"
+                                      className="btn-icon btn-icon--danger inspector__remove-yes"
+                                      onClick={() => {
+                                        void evesov.plans
+                                          .removeSystem(activePlanId, s.systemId)
+                                          .then(() => setRemovingSystemId(null));
+                                      }}
+                                      title={`Confirm remove ${s.systemName}. Assigned upgrades are kept (use "Clear upgrades" to delete them).`}
+                                    >
+                                      Remove
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn-icon"
+                                      onClick={() => setRemovingSystemId(null)}
+                                      title="Cancel"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="btn-icon btn-icon--danger"
+                                    onClick={() => setRemovingSystemId(s.systemId)}
+                                    title={`Remove ${s.systemName}`}
+                                    aria-label={`Remove ${s.systemName}`}
+                                  >
+                                    ×
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           );

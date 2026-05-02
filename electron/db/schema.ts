@@ -91,6 +91,14 @@ CREATE TABLE IF NOT EXISTS preferences (
   value  TEXT NOT NULL
 );
 
+-- One row per (plan, system) marked as the plan's capital. Schema permits many
+-- per plan; the renderer enforces one-capital-per-plan when setting.
+CREATE TABLE IF NOT EXISTS plan_capital_systems (
+  plan_id    INTEGER NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  system_id  INTEGER NOT NULL REFERENCES systems(id),
+  PRIMARY KEY (plan_id, system_id)
+);
+
 -- Per-plan workforce status for a system: local (default, no row), import, export, transit.
 CREATE TABLE IF NOT EXISTS plan_system_status (
   plan_id               INTEGER NOT NULL REFERENCES plans(id) ON DELETE CASCADE,

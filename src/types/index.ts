@@ -183,15 +183,17 @@ export interface EveSovApi {
   };
   plans: {
     list: () => Promise<PlanSummary[]>;
-    get: (id: number) => Promise<{ plan: PlanSummary; scopes: PlanScope[]; upgrades: PlanUpgradeRow[] } | null>;
+    get: (id: number) => Promise<{ plan: PlanSummary; scopes: PlanScope[]; upgrades: PlanUpgradeRow[]; capitalSystemIds: number[] } | null>;
     create: (name: string) => Promise<PlanSummary>;
     rename: (id: number, name: string) => Promise<PlanSummary>;
     duplicate: (id: number, newName: string) => Promise<PlanSummary>;
     delete: (id: number) => Promise<void>;
     setScopes: (planId: number, scopes: PlanScope[]) => Promise<void>;
+    explodeScope: (planId: number, scopeType: 'region' | 'constellation', scopeId: number) => Promise<void>;
     assignUpgrade: (planId: number, systemId: number, upgradeName: string) => Promise<AssignResult>;
     removeUpgrade: (planId: number, systemId: number, upgradeName: string) => Promise<void>;
     removeSystem: (planId: number, systemId: number) => Promise<void>;
+    setCapital: (planId: number, systemId: number, isCapital: boolean) => Promise<void>;
     setSystemStatus: (planId: number, systemId: number, status: SystemStatus) => Promise<void>;
     setUpgradeInstalled: (
       planId: number,
