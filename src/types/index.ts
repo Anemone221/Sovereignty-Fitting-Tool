@@ -209,6 +209,10 @@ export interface EveSovApi {
     removeWorkforceTransfer: (planId: number, sourceSystemId: number) => Promise<void>;
     getWorkforceTransfers: (planId: number) => Promise<WorkforceTransfer[]>;
     getReachableImportSystems: (planId: number, sourceSystemId: number) => Promise<{ systemId: number; systemName: string }[]>;
+    getAlnTargets: (planId: number, systemId: number) => Promise<{ targets: AlnTarget[]; currentLink: AlnLink | null }>;
+    setAlnLink: (planId: number, systemId: number, linkedSystemId: number | null, linkedSystemName: string) => Promise<{ ok: boolean; error?: string }>;
+    removeAlnLink: (planId: number, systemId: number) => Promise<void>;
+    searchSystems: (query: string) => Promise<{ systemId: number; systemName: string }[]>;
   };
   windows: {
     openPanel: (panelId: string, params?: Record<string, unknown>) => Promise<number>;
@@ -220,6 +224,17 @@ export interface EveSovApi {
   events: {
     on: (channel: 'plan-changed' | 'data-refreshed', listener: (payload: unknown) => void) => () => void;
   };
+}
+
+export interface AlnTarget {
+  systemId: number;
+  systemName: string;
+  distanceLy: number;
+}
+
+export interface AlnLink {
+  linkedSystemId: number | null;
+  linkedSystemName: string;
 }
 
 export interface WorkforceTransfer {
@@ -292,6 +307,7 @@ export interface PlanMatrixSystem {
   availablePower: number;
   consumedWorkforce: number;
   availableWorkforce: number;
+  alnLink: AlnLink | null;
 }
 
 export interface PlanMatrix {

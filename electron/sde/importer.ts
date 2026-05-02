@@ -38,6 +38,7 @@ interface SolarSystemRow {
   securityClass?: string;
   starID?: number;
   planetIDs?: number[];
+  position?: { x: number; y: number; z: number };
 }
 
 interface StarRow {
@@ -90,8 +91,8 @@ export async function importSde(db: DB, paths: SdePaths): Promise<{ report: Impo
   );
   const insertSystem = db.prepare(
     `INSERT OR REPLACE INTO systems
-       (id, constellation_id, region_id, name, security_status, security_class)
-     VALUES (?, ?, ?, ?, ?, ?)`
+       (id, constellation_id, region_id, name, security_status, security_class, x, y, z)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   const txn = db.transaction(() => {
@@ -119,7 +120,10 @@ export async function importSde(db: DB, paths: SdePaths): Promise<{ report: Impo
           row.regionID,
           row.name.en,
           row.securityStatus ?? null,
-          row.securityClass ?? null
+          row.securityClass ?? null,
+          row.position?.x ?? null,
+          row.position?.y ?? null,
+          row.position?.z ?? null
         );
         counts.systems++;
         if (row.starID) starToSystem.set(row.starID, row._key);

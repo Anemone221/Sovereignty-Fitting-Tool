@@ -5,7 +5,7 @@ import { FormatBar } from '@/components/FormatBar';
 import { MiniMeter } from '@/components/MiniMeter';
 import { upgradeSymbols } from '@/data/upgradeSymbols';
 import { useUi } from '@/state/uiStore';
-import type { PlanMatrix, Upgrade } from '@shared/index';
+import type { AlnTarget, PlanMatrix, Upgrade } from '@shared/index';
 
 const FMT_KEYS = ['colorSystems', 'upgradeSymbols', 'verticalHeaders', 'hideUnused', 'showInstalled'] as const;
 type FmtKey = (typeof FMT_KEYS)[number];
@@ -33,6 +33,12 @@ export function AssignmentMatrix() {
     showInstalled: false
   });
   const matrixRef = useRef<HTMLDivElement>(null);
+  const [alnPending, setAlnPending] = useState<{ systemId: number; systemName: string } | null>(null);
+  const [alnTargets, setAlnTargets] = useState<AlnTarget[]>([]);
+  const [alnDest, setAlnDest] = useState<number | ''>('');
+  const [alnManual, setAlnManual] = useState(false);
+  const [alnManualName, setAlnManualName] = useState('');
+  const [alnSuggestions, setAlnSuggestions] = useState<{ systemId: number; systemName: string }[]>([]);
 
   useEffect(() => {
     void evesov.data.upgrades().then(setAllUpgrades);
@@ -88,10 +94,17 @@ export function AssignmentMatrix() {
   }, [allUpgrades, fmt.hideUnused, totals]);
 
   const onCellClick = useCallback(
-    async (systemId: number, upgradeName: string, has: boolean, installed: boolean) => {
+    async (systemId: number, systemName: string, upgradeName: string, has: boolean, installed: boolean) => {
       if (activePlanId === null) return;
       if (!has) {
-        await evesov.plans.assignUpgrade(activePlanId, systemId, upgradeName);
+        const r = await evesov.plans.assignUpgrade(activePlanId, systemId, upgradeName);
+        if (!r.ok) { alert(r.error ?? 'Failed to assign upgrade.'); return; }
+        if (upgradeName === 'Advanced Logistics Network') {
+          const { targets } = await evesov.plans.getAlnTargets(activePlanId, systemId);
+          setAlnTargets(targets);
+          setAlnPending({ systemId, systemName });
+          return;
+        }
       } else if (!installed) {
         await evesov.plans.setUpgradeInstalled(activePlanId, systemId, upgradeName, true);
       } else {
@@ -164,6 +177,93 @@ export function AssignmentMatrix() {
                 );
               })}
             </tr>
+            {alnPending && (
+              <tr className="matrix__aln-drawer">
+                <td className="matrix__sticky-col matrix__aln-drawer__label">
+                  <strong>{alnPending.systemName}</strong>
+                  <div className="matrix__system-meta">Set ALN link</div>
+                </td>
+                <td colSpan={columns.length} className="matrix__aln-drawer__body">
+                  <label className="transfer-form__check">
+                    <input
+                      type="checkbox"
+                      checked={alnManual}
+                      onChange={(e) => { setAlnManual(e.target.checked); setAlnDest(''); setAlnManualName(''); }}
+                    />
+                    Manual (cross-alliance)
+                  </label>
+                  {!alnManual ? (
+                    <select
+                      className="transfer-form__select"
+                      value={alnDest}
+                      onChange={(e) => setAlnDest(Number(e.target.value))}
+                    >
+                      <option value="">— select target —</option>
+                      {alnTargets.length === 0 && (
+                        <option disabled>No systems within 5 LY — re-seed required</option>
+                      )}
+                      {alnTargets.map((t) => (
+                        <option key={t.systemId} value={t.systemId}>
+                          {t.systemName} ({t.distanceLy.toFixed(2)} LY)
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        className="transfer-form__input"
+                        list="aln-matrix-suggestions"
+                        value={alnManualName}
+                        onChange={async (e) => {
+                          setAlnManualName(e.target.value);
+                          if (e.target.value.length >= 2) {
+                            const results = await evesov.plans.searchSystems(e.target.value);
+                            setAlnSuggestions(results);
+                          }
+                        }}
+                        placeholder="Type system name…"
+                      />
+                      <datalist id="aln-matrix-suggestions">
+                        {alnSuggestions.map((s) => (
+                          <option key={s.systemId} value={s.systemName} />
+                        ))}
+                      </datalist>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    className="transfer-form__submit"
+                    disabled={(!alnManual && alnDest === '') || (alnManual && !alnManualName.trim())}
+                    onClick={async () => {
+                      if (activePlanId === null || !alnPending) return;
+                      let id: number | null = null;
+                      let name = '';
+                      if (!alnManual) {
+                        const t = alnTargets.find((t) => t.systemId === alnDest);
+                        if (!t) return;
+                        id = t.systemId; name = t.systemName;
+                      } else {
+                        const match = alnSuggestions.find((s) => s.systemName === alnManualName.trim());
+                        id = match?.systemId ?? null;
+                        name = alnManualName.trim();
+                      }
+                      await evesov.plans.setAlnLink(activePlanId, alnPending.systemId, id, name);
+                      setAlnPending(null); setAlnDest(''); setAlnManualName(''); setAlnManual(false);
+                    }}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    className="transfer-form__remove"
+                    onClick={() => { setAlnPending(null); setAlnDest(''); setAlnManualName(''); setAlnManual(false); }}
+                  >
+                    Skip
+                  </button>
+                </td>
+              </tr>
+            )}
           </thead>
           <tbody>
             {matrix.systems.map((s) => {
@@ -200,18 +300,27 @@ export function AssignmentMatrix() {
                     if (has) {
                       glyph = fmt.showInstalled ? (installed ? '●' : '○') : '●';
                     }
-                    const title = !has
-                      ? `Click to add ${c}`
-                      : installed
+                    let title: string;
+                    if (!has) {
+                      title = `Click to add ${c}`;
+                    } else if (c === 'Advanced Logistics Network') {
+                      const link = s.alnLink;
+                      const linkLabel = link ? `→ ${link.linkedSystemName}` : 'link required';
+                      title = installed
+                        ? `${c} (installed, ${linkLabel}) — click to remove`
+                        : `${c} (todo, ${linkLabel}) — click to mark installed`;
+                    } else {
+                      title = installed
                         ? `${c} (installed) — click to remove`
                         : `${c} (todo) — click to mark installed`;
+                    }
                     return (
                       <td key={c} className={`matrix__cell matrix__cell--clickable${has ? ' matrix__cell--on' : ''}`}>
                         <button
                           type="button"
                           className="matrix__cell-btn"
                           title={title}
-                          onClick={() => void onCellClick(s.id, c, has, installed)}
+                          onClick={() => void onCellClick(s.id, s.name, c, has, installed)}
                         >
                           {glyph || ' '}
                         </button>

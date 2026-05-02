@@ -24,7 +24,10 @@ CREATE TABLE IF NOT EXISTS systems (
   region_id         INTEGER NOT NULL REFERENCES regions(id),
   name              TEXT NOT NULL,
   security_status   REAL,
-  security_class    TEXT
+  security_class    TEXT,
+  x                 REAL DEFAULT NULL,
+  y                 REAL DEFAULT NULL,
+  z                 REAL DEFAULT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_systems_constellation ON systems(constellation_id);
 CREATE INDEX IF NOT EXISTS idx_systems_region        ON systems(region_id);
@@ -96,6 +99,16 @@ CREATE TABLE IF NOT EXISTS preferences (
 CREATE TABLE IF NOT EXISTS plan_capital_systems (
   plan_id    INTEGER NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
   system_id  INTEGER NOT NULL REFERENCES systems(id),
+  PRIMARY KEY (plan_id, system_id)
+);
+
+-- ALN jump bridge links: one target system per (plan, source system).
+-- linked_system_id is nullable because manual cross-alliance entries may not exist in the local DB.
+CREATE TABLE IF NOT EXISTS plan_aln_links (
+  plan_id             INTEGER NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  system_id           INTEGER NOT NULL REFERENCES systems(id),
+  linked_system_id    INTEGER,
+  linked_system_name  TEXT    NOT NULL,
   PRIMARY KEY (plan_id, system_id)
 );
 
