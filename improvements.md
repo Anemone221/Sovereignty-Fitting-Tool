@@ -61,15 +61,8 @@ Below will be per section improvements I want to complete:
 - Add scrollable Interface
 - add 2 columns, one for date created, other for date modified
 - Add location column: Tells us what region the sov we are planning exists.
-- When you remove a constelation from universe remove from plan
-- Ability to clear all upgrades
-- when click on a system in plan window, focus the system window.
-- Plus in plan should not include workforce or power monetoring in its criteria (rework logic of hasRemaningSpace in plan inspector )
 
 > QOL
-
-    - Add symbols for System effects from effect generators. Also give effect
-    - Add Local tag for Systems if they are not importing or exporting.
 
 > Feature Add
 
@@ -79,8 +72,15 @@ Below will be per section improvements I want to complete:
 
 > Necessary
 
-> QOL
+- When you remove a constelation from universe remove from Inspector
+- Ability to clear all upgrades
+- when click on a system in Inspector window, focus the system window.
+- The Plus in Inspector should not include gas or ice in its criteria (rework logic of hasRemaningSpace in plan inspector )
 
+    > QOL
+
+- Add symbols for System effects from effect generators. Also give effect
+- Add Local tag for Systems if they are not importing or exporting.
 - Add symbols for Strategic Upgrades/Supercapitals next to systems.
 - Add reverse system for ice and Gas for Constellation system
 - Warning if no ADM activites exist in this system

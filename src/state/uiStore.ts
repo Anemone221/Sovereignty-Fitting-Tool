@@ -3,13 +3,19 @@ import { evesov } from '@/api/evesov';
 
 const ACTIVE_PLAN_KEY = 'plan.active.v1';
 
+type FocusPanelFn = (panelId: string) => void;
+
 interface UiState {
   selectedSystemId: number | null;
   selectSystem: (id: number | null) => void;
   activePlanId: number | null;
   setActivePlan: (id: number | null) => void;
   hydrateActivePlan: () => Promise<void>;
+  registerFocusPanel: (fn: FocusPanelFn | null) => void;
+  focusPanel: FocusPanelFn;
 }
+
+let focusPanelImpl: FocusPanelFn | null = null;
 
 export const useUi = create<UiState>((set) => ({
   selectedSystemId: null,
@@ -27,5 +33,11 @@ export const useUi = create<UiState>((set) => ({
     }
     const n = Number(v);
     set({ activePlanId: Number.isFinite(n) ? n : null });
+  },
+  registerFocusPanel: (fn) => {
+    focusPanelImpl = fn;
+  },
+  focusPanel: (panelId) => {
+    focusPanelImpl?.(panelId);
   }
 }));

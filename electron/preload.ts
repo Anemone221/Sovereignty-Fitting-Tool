@@ -25,14 +25,21 @@ const api: EveSovApi = {
     duplicate: (id, newName) => ipcRenderer.invoke('plans.duplicate', id, newName),
     delete: (id) => ipcRenderer.invoke('plans.delete', id),
     setScopes: (planId, scopes) => ipcRenderer.invoke('plans.setScopes', planId, scopes),
+    explodeScope: (planId, scopeType, scopeId) =>
+      ipcRenderer.invoke('plans.explodeScope', planId, scopeType, scopeId),
     assignUpgrade: (planId, systemId, upgradeName) =>
       ipcRenderer.invoke('plans.assignUpgrade', planId, systemId, upgradeName),
     removeUpgrade: (planId, systemId, upgradeName) =>
       ipcRenderer.invoke('plans.removeUpgrade', planId, systemId, upgradeName),
     removeSystem: (planId, systemId) =>
       ipcRenderer.invoke('plans.removeSystem', planId, systemId),
+    setCapital: (planId, systemId, isCapital) =>
+      ipcRenderer.invoke('plans.setCapital', planId, systemId, isCapital),
     setSystemStatus: (planId, systemId, status) =>
       ipcRenderer.invoke('plans.setSystemStatus', planId, systemId, status),
+    setUpgradeInstalled: (planId, systemId, upgradeName, installed) =>
+      ipcRenderer.invoke('plans.setUpgradeInstalled', planId, systemId, upgradeName, installed),
+    clearUpgrades: (planId, scope) => ipcRenderer.invoke('plans.clearUpgrades', planId, scope),
     systemBalance: (planId, systemId) =>
       ipcRenderer.invoke('plans.systemBalance', planId, systemId),
     summary: (planId) => ipcRenderer.invoke('plans.summary', planId),

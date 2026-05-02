@@ -3,6 +3,7 @@ import { getDb } from '../db/userDb.js';
 import { findPath, reachableSystems } from './adjacency.js';
 import type {
   AssignResult,
+  ClearUpgradesScope,
   PlanMatrix,
   PlanMatrixSystem,
   PlanRollup,
@@ -34,6 +35,7 @@ interface PlanUpgradeDbRow {
   upgrade_name: string;
   ordering: number;
   notes: string | null;
+  installed: number;
 }
 
 interface BalanceDbRow {
@@ -57,6 +59,9 @@ interface RollupDbRow extends BalanceDbRow {
   region_id: number;
   region_name: string;
   security_status: number | null;
+  upgrade_names: string | null;
+  installed_count: number;
+  total_count: number;
 }
 
 interface TransferDbRow {
@@ -80,7 +85,8 @@ const toPlanUpgrade = (r: PlanUpgradeDbRow): PlanUpgradeRow => ({
   systemId: r.system_id,
   upgradeName: r.upgrade_name,
   ordering: r.ordering,
-  notes: r.notes
+  notes: r.notes,
+  installed: r.installed === 1
 });
 
 function balanceFromRow(r: BalanceDbRow): SystemBalance {
@@ -113,7 +119,10 @@ function rollupFromRow(r: RollupDbRow): PlanRollupRow {
     constellationName: r.constellation_name,
     regionId: r.region_id,
     regionName: r.region_name,
-    securityStatus: r.security_status
+    securityStatus: r.security_status,
+    upgrades: r.upgrade_names ? r.upgrade_names.split(String.fromCharCode(31)) : [],
+    installedCount: r.installed_count,
+    totalCount: r.total_count
   };
 }
 
@@ -241,7 +250,10 @@ const BALANCE_SQL_FOR_PLAN = `
         END                              AS consumed_workforce,
     COALESCE(SUM(u.superionic_ice), 0)   AS consumed_ice,
     COALESCE(SUM(u.magmatic_gas), 0)     AS consumed_gas,
-    COALESCE(SUM(u.startup), 0)          AS startup_fuel
+    COALESCE(SUM(u.startup), 0)          AS startup_fuel,
+    GROUP_CONCAT(pu.upgrade_name, CHAR(31)) AS upgrade_names,
+    COALESCE(SUM(pu.installed), 0)        AS installed_count,
+    COALESCE(SUM(CASE WHEN pu.upgrade_name IS NOT NULL THEN 1 ELSE 0 END), 0) AS total_count
   FROM active_systems acs
   JOIN system_budget sb     ON sb.system_id = acs.system_id
   JOIN systems s            ON s.id = sb.system_id
@@ -273,7 +285,15 @@ export function registerPlansIpc(): void {
 
   ipcMain.handle(
     'plans.get',
-    (_, id: number): { plan: PlanSummary; scopes: PlanScope[]; upgrades: PlanUpgradeRow[] } | null => {
+    (
+      _,
+      id: number
+    ): {
+      plan: PlanSummary;
+      scopes: PlanScope[];
+      upgrades: PlanUpgradeRow[];
+      capitalSystemIds: number[];
+    } | null => {
       const db = getDb();
       const plan = db.prepare('SELECT * FROM plans WHERE id = ?').get(id) as PlanDbRow | undefined;
       if (!plan) return null;
@@ -283,11 +303,39 @@ export function registerPlansIpc(): void {
       const upgradeRows = db
         .prepare('SELECT * FROM plan_upgrades WHERE plan_id = ? ORDER BY system_id, ordering, upgrade_name')
         .all(id) as PlanUpgradeDbRow[];
+      const capitalRows = db
+        .prepare('SELECT system_id FROM plan_capital_systems WHERE plan_id = ?')
+        .all(id) as Array<{ system_id: number }>;
       return {
         plan: toPlanSummary(plan),
         scopes: scopeRows.map((r) => ({ scopeType: r.scope_type, scopeId: r.scope_id })),
-        upgrades: upgradeRows.map(toPlanUpgrade)
+        upgrades: upgradeRows.map(toPlanUpgrade),
+        capitalSystemIds: capitalRows.map((r) => r.system_id)
       };
+    }
+  );
+
+  ipcMain.handle(
+    'plans.setCapital',
+    (_, planId: number, systemId: number, isCapital: boolean): void => {
+      const db = getDb();
+      db.transaction(() => {
+        if (isCapital) {
+          db.prepare('DELETE FROM plan_capital_systems WHERE plan_id = ?').run(planId);
+          db.prepare(
+            'INSERT INTO plan_capital_systems (plan_id, system_id) VALUES (?, ?)'
+          ).run(planId, systemId);
+        } else {
+          db.prepare(
+            'DELETE FROM plan_capital_systems WHERE plan_id = ? AND system_id = ?'
+          ).run(planId, systemId);
+        }
+        db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(
+          new Date().toISOString(),
+          planId
+        );
+      })();
+      broadcastPlanChanged(planId);
     }
   );
 
@@ -329,8 +377,8 @@ export function registerPlansIpc(): void {
            SELECT ?, scope_type, scope_id FROM plan_scopes WHERE plan_id = ?`
       ).run(createdId, sourceId);
       db.prepare(
-        `INSERT INTO plan_upgrades (plan_id, system_id, upgrade_name, ordering, notes)
-           SELECT ?, system_id, upgrade_name, ordering, notes FROM plan_upgrades WHERE plan_id = ?`
+        `INSERT INTO plan_upgrades (plan_id, system_id, upgrade_name, ordering, notes, installed)
+           SELECT ?, system_id, upgrade_name, ordering, notes, installed FROM plan_upgrades WHERE plan_id = ?`
       ).run(createdId, sourceId);
     })();
     const row = db.prepare('SELECT * FROM plans WHERE id = ?').get(createdId) as PlanDbRow;
@@ -339,12 +387,57 @@ export function registerPlansIpc(): void {
 
   ipcMain.handle('plans.setScopes', (_, planId: number, scopes: PlanScope[]): void => {
     const db = getDb();
+    const previous = db
+      .prepare('SELECT scope_type, scope_id FROM plan_scopes WHERE plan_id = ?')
+      .all(planId) as ScopeDbRow[];
+    const incomingKeys = new Set(scopes.map((s) => `${s.scopeType}:${s.scopeId}`));
+    const removedRegions = new Set<number>();
+    const removedConstellations = new Set<number>();
+    for (const p of previous) {
+      const key = `${p.scope_type}:${p.scope_id}`;
+      if (incomingKeys.has(key)) continue;
+      if (p.scope_type === 'region') removedRegions.add(p.scope_id);
+      else if (p.scope_type === 'constellation') removedConstellations.add(p.scope_id);
+    }
+
+    let filtered = scopes;
+    if (removedRegions.size > 0 || removedConstellations.size > 0) {
+      const sysRows = db
+        .prepare(
+          `SELECT id, constellation_id, region_id FROM systems
+            WHERE constellation_id IN (${[...removedConstellations, 0].join(',')})
+               OR region_id        IN (${[...removedRegions, 0].join(',')})`
+        )
+        .all() as Array<{ id: number; constellation_id: number; region_id: number }>;
+      const droppedSystemIds = new Set<number>();
+      for (const r of sysRows) {
+        if (removedConstellations.has(r.constellation_id) || removedRegions.has(r.region_id)) {
+          droppedSystemIds.add(r.id);
+        }
+      }
+      const constRows = db
+        .prepare(
+          `SELECT id, region_id FROM constellations
+            WHERE region_id IN (${[...removedRegions, 0].join(',')})`
+        )
+        .all() as Array<{ id: number; region_id: number }>;
+      const droppedConstellationIds = new Set<number>();
+      for (const c of constRows) {
+        if (removedRegions.has(c.region_id)) droppedConstellationIds.add(c.id);
+      }
+      filtered = scopes.filter((s) => {
+        if (s.scopeType === 'system' && droppedSystemIds.has(s.scopeId)) return false;
+        if (s.scopeType === 'constellation' && droppedConstellationIds.has(s.scopeId)) return false;
+        return true;
+      });
+    }
+
     const txn = db.transaction(() => {
       db.prepare('DELETE FROM plan_scopes WHERE plan_id = ?').run(planId);
       const ins = db.prepare(
         'INSERT INTO plan_scopes (plan_id, scope_type, scope_id) VALUES (?, ?, ?)'
       );
-      for (const s of scopes) ins.run(planId, s.scopeType, s.scopeId);
+      for (const s of filtered) ins.run(planId, s.scopeType, s.scopeId);
       db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), planId);
     });
     txn();
@@ -389,17 +482,170 @@ export function registerPlansIpc(): void {
     }
   );
 
+  ipcMain.handle(
+    'plans.explodeScope',
+    (
+      _,
+      planId: number,
+      scopeType: 'region' | 'constellation',
+      scopeId: number
+    ): void => {
+      const db = getDb();
+      let siblings: Array<{ id: number }> = [];
+      if (scopeType === 'region') {
+        siblings = db
+          .prepare(
+            `SELECT s.id FROM systems s
+               JOIN system_budget sb ON sb.system_id = s.id
+              WHERE s.region_id = ? AND sb.sov_eligible = 1`
+          )
+          .all(scopeId) as Array<{ id: number }>;
+      } else {
+        siblings = db
+          .prepare(
+            `SELECT s.id FROM systems s
+               JOIN system_budget sb ON sb.system_id = s.id
+              WHERE s.constellation_id = ? AND sb.sov_eligible = 1`
+          )
+          .all(scopeId) as Array<{ id: number }>;
+      }
+      db.transaction(() => {
+        if (scopeType === 'region') {
+          db.prepare(
+            "DELETE FROM plan_scopes WHERE plan_id = ? AND scope_type = 'region' AND scope_id = ?"
+          ).run(planId, scopeId);
+          db.prepare(
+            `DELETE FROM plan_scopes
+              WHERE plan_id = ? AND scope_type = 'constellation'
+                AND scope_id IN (SELECT id FROM constellations WHERE region_id = ?)`
+          ).run(planId, scopeId);
+        } else {
+          db.prepare(
+            "DELETE FROM plan_scopes WHERE plan_id = ? AND scope_type = 'constellation' AND scope_id = ?"
+          ).run(planId, scopeId);
+        }
+        const ins = db.prepare(
+          "INSERT OR IGNORE INTO plan_scopes (plan_id, scope_type, scope_id) VALUES (?, 'system', ?)"
+        );
+        for (const sib of siblings) ins.run(planId, sib.id);
+        db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(
+          new Date().toISOString(),
+          planId
+        );
+      })();
+      broadcastPlanChanged(planId);
+    }
+  );
+
   ipcMain.handle('plans.removeSystem', (_, planId: number, systemId: number): void => {
     const db = getDb();
+    const sys = db
+      .prepare('SELECT constellation_id, region_id FROM systems WHERE id = ?')
+      .get(systemId) as { constellation_id: number; region_id: number } | undefined;
+    if (!sys) return;
+
+    const regionScoped =
+      db
+        .prepare(
+          "SELECT 1 FROM plan_scopes WHERE plan_id = ? AND scope_type = 'region' AND scope_id = ?"
+        )
+        .get(planId, sys.region_id) !== undefined;
+    const constellationScoped =
+      db
+        .prepare(
+          "SELECT 1 FROM plan_scopes WHERE plan_id = ? AND scope_type = 'constellation' AND scope_id = ?"
+        )
+        .get(planId, sys.constellation_id) !== undefined;
+
     db.transaction(() => {
-      db.prepare('DELETE FROM plan_upgrades WHERE plan_id = ? AND system_id = ?').run(planId, systemId);
-      db.prepare(
-        "DELETE FROM plan_scopes WHERE plan_id = ? AND scope_type = 'system' AND scope_id = ?"
-      ).run(planId, systemId);
+      if (regionScoped) {
+        const siblings = db
+          .prepare(
+            `SELECT s.id FROM systems s
+               JOIN system_budget sb ON sb.system_id = s.id
+              WHERE s.region_id = ? AND sb.sov_eligible = 1 AND s.id != ?`
+          )
+          .all(sys.region_id, systemId) as Array<{ id: number }>;
+        db.prepare(
+          "DELETE FROM plan_scopes WHERE plan_id = ? AND scope_type = 'region' AND scope_id = ?"
+        ).run(planId, sys.region_id);
+        db.prepare(
+          `DELETE FROM plan_scopes
+            WHERE plan_id = ? AND scope_type = 'constellation'
+              AND scope_id IN (SELECT id FROM constellations WHERE region_id = ?)`
+        ).run(planId, sys.region_id);
+        const ins = db.prepare(
+          "INSERT OR IGNORE INTO plan_scopes (plan_id, scope_type, scope_id) VALUES (?, 'system', ?)"
+        );
+        for (const sib of siblings) ins.run(planId, sib.id);
+      } else if (constellationScoped) {
+        const siblings = db
+          .prepare(
+            `SELECT s.id FROM systems s
+               JOIN system_budget sb ON sb.system_id = s.id
+              WHERE s.constellation_id = ? AND sb.sov_eligible = 1 AND s.id != ?`
+          )
+          .all(sys.constellation_id, systemId) as Array<{ id: number }>;
+        db.prepare(
+          "DELETE FROM plan_scopes WHERE plan_id = ? AND scope_type = 'constellation' AND scope_id = ?"
+        ).run(planId, sys.constellation_id);
+        const ins = db.prepare(
+          "INSERT OR IGNORE INTO plan_scopes (plan_id, scope_type, scope_id) VALUES (?, 'system', ?)"
+        );
+        for (const sib of siblings) ins.run(planId, sib.id);
+      } else {
+        db.prepare(
+          "DELETE FROM plan_scopes WHERE plan_id = ? AND scope_type = 'system' AND scope_id = ?"
+        ).run(planId, systemId);
+      }
+      db.prepare('DELETE FROM plan_system_status WHERE plan_id = ? AND system_id = ?').run(
+        planId,
+        systemId
+      );
       db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), planId);
     })();
     broadcastPlanChanged(planId);
   });
+
+  ipcMain.handle(
+    'plans.setUpgradeInstalled',
+    (_, planId: number, systemId: number, upgradeName: string, installed: boolean): void => {
+      const db = getDb();
+      db.transaction(() => {
+        db.prepare(
+          `UPDATE plan_upgrades SET installed = ?
+             WHERE plan_id = ? AND system_id = ? AND upgrade_name = ?`
+        ).run(installed ? 1 : 0, planId, systemId, upgradeName);
+        db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), planId);
+      })();
+      broadcastPlanChanged(planId);
+    }
+  );
+
+  ipcMain.handle(
+    'plans.clearUpgrades',
+    (_, planId: number, scope: ClearUpgradesScope): void => {
+      const db = getDb();
+      db.transaction(() => {
+        if (scope.kind === 'plan') {
+          db.prepare('DELETE FROM plan_upgrades WHERE plan_id = ?').run(planId);
+        } else if (scope.kind === 'system') {
+          db.prepare('DELETE FROM plan_upgrades WHERE plan_id = ? AND system_id = ?').run(
+            planId,
+            scope.id
+          );
+        } else {
+          db.prepare(
+            `DELETE FROM plan_upgrades
+               WHERE plan_id = ?
+                 AND system_id IN (SELECT id FROM systems WHERE constellation_id = ?)`
+          ).run(planId, scope.id);
+        }
+        db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), planId);
+      })();
+      broadcastPlanChanged(planId);
+    }
+  );
 
   ipcMain.handle(
     'plans.systemBalance',

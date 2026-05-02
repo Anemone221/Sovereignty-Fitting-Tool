@@ -52,6 +52,7 @@ export function DockShell() {
   const [active, setActive] = useState<string | null>('system');
   const persistTimer = useRef<number | null>(null);
   const hydrateActivePlan = useUi((s) => s.hydrateActivePlan);
+  const registerFocusPanel = useUi((s) => s.registerFocusPanel);
 
   useEffect(() => {
     void hydrateActivePlan();
@@ -74,6 +75,11 @@ export function DockShell() {
       position: def.position
     });
   }, []);
+
+  useEffect(() => {
+    registerFocusPanel((panelId) => addOrFocus(panelId));
+    return () => registerFocusPanel(null);
+  }, [registerFocusPanel, addOrFocus]);
 
   const onReady = useCallback(async (event: DockviewReadyEvent) => {
     apiRef.current = event.api;

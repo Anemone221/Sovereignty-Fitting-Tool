@@ -105,7 +105,13 @@ export interface PlanUpgradeRow {
   upgradeName: string;
   ordering: number;
   notes: string | null;
+  installed: boolean;
 }
+
+export type ClearUpgradesScope =
+  | { kind: 'plan' }
+  | { kind: 'constellation'; id: number }
+  | { kind: 'system'; id: number };
 
 export interface AssignResult {
   ok: boolean;
@@ -177,16 +183,25 @@ export interface EveSovApi {
   };
   plans: {
     list: () => Promise<PlanSummary[]>;
-    get: (id: number) => Promise<{ plan: PlanSummary; scopes: PlanScope[]; upgrades: PlanUpgradeRow[] } | null>;
+    get: (id: number) => Promise<{ plan: PlanSummary; scopes: PlanScope[]; upgrades: PlanUpgradeRow[]; capitalSystemIds: number[] } | null>;
     create: (name: string) => Promise<PlanSummary>;
     rename: (id: number, name: string) => Promise<PlanSummary>;
     duplicate: (id: number, newName: string) => Promise<PlanSummary>;
     delete: (id: number) => Promise<void>;
     setScopes: (planId: number, scopes: PlanScope[]) => Promise<void>;
+    explodeScope: (planId: number, scopeType: 'region' | 'constellation', scopeId: number) => Promise<void>;
     assignUpgrade: (planId: number, systemId: number, upgradeName: string) => Promise<AssignResult>;
     removeUpgrade: (planId: number, systemId: number, upgradeName: string) => Promise<void>;
     removeSystem: (planId: number, systemId: number) => Promise<void>;
+    setCapital: (planId: number, systemId: number, isCapital: boolean) => Promise<void>;
     setSystemStatus: (planId: number, systemId: number, status: SystemStatus) => Promise<void>;
+    setUpgradeInstalled: (
+      planId: number,
+      systemId: number,
+      upgradeName: string,
+      installed: boolean
+    ) => Promise<void>;
+    clearUpgrades: (planId: number, scope: ClearUpgradesScope) => Promise<void>;
     systemBalance: (planId: number, systemId: number) => Promise<SystemBalance | null>;
     summary: (planId: number) => Promise<PlanRollup>;
     matrix: (planId: number) => Promise<PlanMatrix>;
@@ -228,6 +243,9 @@ export interface PlanRollupRow extends SystemBalance {
   regionId: number;
   regionName: string;
   securityStatus: number | null;
+  upgrades: string[];
+  installedCount: number;
+  totalCount: number;
 }
 
 export interface PlanRollup {

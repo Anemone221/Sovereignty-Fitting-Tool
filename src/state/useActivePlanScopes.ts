@@ -9,21 +9,26 @@ export function scopeKey(type: PlanScope['scopeType'], id: number): string {
 
 export interface ActivePlanScopes {
   scopes: PlanScope[];
+  capitalSystemIds: number[];
   has: (type: PlanScope['scopeType'], id: number) => boolean;
+  isCapital: (systemId: number) => boolean;
   toggle: (type: PlanScope['scopeType'], id: number) => Promise<void>;
 }
 
 export function useActivePlanScopes(): ActivePlanScopes {
   const activePlanId = useUi((s) => s.activePlanId);
   const [scopes, setScopes] = useState<PlanScope[]>([]);
+  const [capitalSystemIds, setCapitalSystemIds] = useState<number[]>([]);
 
   const refresh = useCallback(async () => {
     if (activePlanId === null) {
       setScopes([]);
+      setCapitalSystemIds([]);
       return;
     }
     const got = await evesov.plans.get(activePlanId);
     setScopes(got?.scopes ?? []);
+    setCapitalSystemIds(got?.capitalSystemIds ?? []);
   }, [activePlanId]);
 
   useEffect(() => {
@@ -50,9 +55,13 @@ export function useActivePlanScopes(): ActivePlanScopes {
     [activePlanId]
   );
 
+  const capitalSet = new Set(capitalSystemIds);
+
   return {
     scopes,
+    capitalSystemIds,
     has: (type, id) => set.has(scopeKey(type, id)),
+    isCapital: (systemId) => capitalSet.has(systemId),
     toggle
   };
 }
