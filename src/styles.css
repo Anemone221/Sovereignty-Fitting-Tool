@@ -293,6 +293,7 @@ input[type="search"]:focus { border-color: var(--accent); }
   font-size: 10px;
   text-transform: uppercase;
 }
+.detail__badge--warn { border-color: #b8860b; color: #e6b800; background: rgba(184,134,11,0.12); }
 .detail__section { margin-bottom: 24px; }
 .detail__section h3 {
   font-size: 12px;
@@ -951,3 +952,13 @@ thead .matrix__sticky-col { z-index: 3; background: var(--bg-elev); }
   color: var(--fg-dim);
 }
 .transfer-form__remove:hover { color: var(--danger); border-color: var(--danger); }
+
+.matrix__aln-drawer { background: var(--bg-elev); }
+.matrix__aln-drawer__label { font-size: 12px; vertical-align: top; padding: 8px; }
+.matrix__aln-drawer__body {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

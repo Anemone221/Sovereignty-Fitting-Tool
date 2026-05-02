@@ -2,6 +2,8 @@ import { BrowserWindow, ipcMain } from 'electron';
 import { getDb } from '../db/userDb.js';
 import { findPath, reachableSystems } from './adjacency.js';
 import type {
+  AlnLink,
+  AlnTarget,
   AssignResult,
   ClearUpgradesScope,
   PlanMatrix,
@@ -380,6 +382,10 @@ export function registerPlansIpc(): void {
         `INSERT INTO plan_upgrades (plan_id, system_id, upgrade_name, ordering, notes, installed)
            SELECT ?, system_id, upgrade_name, ordering, notes, installed FROM plan_upgrades WHERE plan_id = ?`
       ).run(createdId, sourceId);
+      db.prepare(
+        `INSERT INTO plan_aln_links (plan_id, system_id, linked_system_id, linked_system_name)
+           SELECT ?, system_id, linked_system_id, linked_system_name FROM plan_aln_links WHERE plan_id = ?`
+      ).run(createdId, sourceId);
     })();
     const row = db.prepare('SELECT * FROM plans WHERE id = ?').get(createdId) as PlanDbRow;
     return toPlanSummary(row);
@@ -613,6 +619,7 @@ export function registerPlansIpc(): void {
         planId,
         systemId
       );
+      db.prepare('DELETE FROM plan_aln_links WHERE plan_id = ? AND system_id = ?').run(planId, systemId);
       db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), planId);
     })();
     broadcastPlanChanged(planId);
@@ -640,14 +647,21 @@ export function registerPlansIpc(): void {
       db.transaction(() => {
         if (scope.kind === 'plan') {
           db.prepare('DELETE FROM plan_upgrades WHERE plan_id = ?').run(planId);
+          db.prepare('DELETE FROM plan_aln_links WHERE plan_id = ?').run(planId);
         } else if (scope.kind === 'system') {
           db.prepare('DELETE FROM plan_upgrades WHERE plan_id = ? AND system_id = ?').run(
             planId,
             scope.id
           );
+          db.prepare('DELETE FROM plan_aln_links WHERE plan_id = ? AND system_id = ?').run(planId, scope.id);
         } else {
           db.prepare(
             `DELETE FROM plan_upgrades
+               WHERE plan_id = ?
+                 AND system_id IN (SELECT id FROM systems WHERE constellation_id = ?)`
+          ).run(planId, scope.id);
+          db.prepare(
+            `DELETE FROM plan_aln_links
                WHERE plan_id = ?
                  AND system_id IN (SELECT id FROM systems WHERE constellation_id = ?)`
           ).run(planId, scope.id);
@@ -790,6 +804,15 @@ export function registerPlansIpc(): void {
       upgradesBySystem.set(u.system_id, arr);
     }
 
+    const alnLinkRows = db
+      .prepare('SELECT system_id, linked_system_id, linked_system_name FROM plan_aln_links WHERE plan_id = ?')
+      .all(planId) as Array<{ system_id: number; linked_system_id: number | null; linked_system_name: string }>;
+
+    const alnBySystem = new Map<number, AlnLink>();
+    for (const r of alnLinkRows) {
+      alnBySystem.set(r.system_id, { linkedSystemId: r.linked_system_id, linkedSystemName: r.linked_system_name });
+    }
+
     const balanceRows = db.prepare(BALANCE_SQL_FOR_PLAN).all({ planId }) as RollupDbRow[];
     const usageBySystem = new Map<number, { power: number; workforce: number; ice: number; gas: number }>();
     const rawBySystem = new Map<
@@ -829,7 +852,8 @@ export function registerPlansIpc(): void {
         consumedPower: raw?.consumedPower ?? 0,
         availablePower: raw?.availablePower ?? 0,
         consumedWorkforce: raw?.consumedWorkforce ?? 0,
-        availableWorkforce: raw?.availableWorkforce ?? 0
+        availableWorkforce: raw?.availableWorkforce ?? 0,
+        alnLink: alnBySystem.get(r.id) ?? null,
       };
     });
 
@@ -977,6 +1001,132 @@ export function registerPlansIpc(): void {
         .all(planId, ...reachable) as { system_id: number; system_name: string }[];
 
       return rows.map((r) => ({ systemId: r.system_id, systemName: r.system_name }));
+    }
+  );
+
+  ipcMain.handle(
+    'plans.getAlnTargets',
+    (_, planId: number, systemId: number): { targets: AlnTarget[]; currentLink: AlnLink | null } => {
+      const db = getDb();
+      const src = db.prepare('SELECT x, y, z FROM systems WHERE id = ?').get(systemId) as
+        | { x: number | null; y: number | null; z: number | null }
+        | undefined;
+
+      if (!src || src.x === null || src.y === null || src.z === null) {
+        return { targets: [], currentLink: null };
+      }
+
+      const candidates = db
+        .prepare('SELECT id, name, x, y, z FROM systems WHERE x IS NOT NULL AND id != ?')
+        .all(systemId) as Array<{ id: number; name: string; x: number; y: number; z: number }>;
+
+      const METERS_PER_AU = 149597870691;
+      const AU_PER_LY = 63239.6717;
+      const { x: sx, y: sy, z: sz } = src;
+
+      const targets: AlnTarget[] = [];
+      for (const c of candidates) {
+        const dx = sx - c.x;
+        const dy = sy - c.y;
+        const dz = sz - c.z;
+        const ly = Math.sqrt(dx * dx + dy * dy + dz * dz) / METERS_PER_AU / AU_PER_LY;
+        if (ly <= 5) {
+          targets.push({ systemId: c.id, systemName: c.name, distanceLy: ly });
+        }
+      }
+      targets.sort((a, b) => a.distanceLy - b.distanceLy);
+
+      const linkRow = db
+        .prepare('SELECT linked_system_id, linked_system_name FROM plan_aln_links WHERE plan_id = ? AND system_id = ?')
+        .get(planId, systemId) as { linked_system_id: number | null; linked_system_name: string } | undefined;
+
+      const currentLink: AlnLink | null = linkRow
+        ? { linkedSystemId: linkRow.linked_system_id, linkedSystemName: linkRow.linked_system_name }
+        : null;
+
+      return { targets, currentLink };
+    }
+  );
+
+  ipcMain.handle(
+    'plans.setAlnLink',
+    (
+      _,
+      planId: number,
+      systemId: number,
+      linkedSystemId: number | null,
+      linkedSystemName: string
+    ): { ok: boolean; error?: string } => {
+      if (!linkedSystemName.trim()) return { ok: false, error: 'Linked system name is required.' };
+      const db = getDb();
+
+      const sourceName = (db.prepare('SELECT name FROM systems WHERE id = ?').get(systemId) as { name: string } | undefined)?.name ?? String(systemId);
+
+      db.transaction(() => {
+        // Write the forward link (source → target).
+        db.prepare(
+          `INSERT INTO plan_aln_links (plan_id, system_id, linked_system_id, linked_system_name)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(plan_id, system_id) DO UPDATE SET
+             linked_system_id   = excluded.linked_system_id,
+             linked_system_name = excluded.linked_system_name`
+        ).run(planId, systemId, linkedSystemId, linkedSystemName.trim());
+
+        // Write the reverse link and ensure the ALN upgrade is assigned — only when the
+        // target is a known local system (linkedSystemId non-null).
+        if (linkedSystemId !== null) {
+          // Assign ALN upgrade to the target system if not already present.
+          db.prepare(
+            `INSERT INTO plan_upgrades (plan_id, system_id, upgrade_name, ordering)
+             VALUES (?, ?, 'Advanced Logistics Network', COALESCE(
+               (SELECT MAX(ordering) + 1 FROM plan_upgrades WHERE plan_id = ? AND system_id = ?), 0))
+             ON CONFLICT(plan_id, system_id, upgrade_name) DO NOTHING`
+          ).run(planId, linkedSystemId, planId, linkedSystemId);
+
+          // Write the reverse link (target → source).
+          db.prepare(
+            `INSERT INTO plan_aln_links (plan_id, system_id, linked_system_id, linked_system_name)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT(plan_id, system_id) DO UPDATE SET
+               linked_system_id   = excluded.linked_system_id,
+               linked_system_name = excluded.linked_system_name`
+          ).run(planId, linkedSystemId, systemId, sourceName);
+        }
+
+        db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), planId);
+      })();
+      broadcastPlanChanged(planId);
+      return { ok: true };
+    }
+  );
+
+  ipcMain.handle('plans.removeAlnLink', (_, planId: number, systemId: number): void => {
+    const db = getDb();
+    db.transaction(() => {
+      // Remove forward link.
+      const fwd = db.prepare('SELECT linked_system_id FROM plan_aln_links WHERE plan_id = ? AND system_id = ?')
+        .get(planId, systemId) as { linked_system_id: number | null } | undefined;
+      db.prepare('DELETE FROM plan_aln_links WHERE plan_id = ? AND system_id = ?').run(planId, systemId);
+
+      // Remove reverse link only if it still points back at the source system.
+      if (fwd?.linked_system_id !== null && fwd?.linked_system_id !== undefined) {
+        db.prepare(
+          'DELETE FROM plan_aln_links WHERE plan_id = ? AND system_id = ? AND linked_system_id = ?'
+        ).run(planId, fwd.linked_system_id, systemId);
+      }
+
+      db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), planId);
+    })();
+    broadcastPlanChanged(planId);
+  });
+
+  ipcMain.handle(
+    'plans.searchSystems',
+    (_, query: string): { systemId: number; systemName: string }[] => {
+      const rows = getDb()
+        .prepare('SELECT id, name FROM systems WHERE name LIKE ? LIMIT 50')
+        .all(`%${query}%`) as { id: number; name: string }[];
+      return rows.map((r) => ({ systemId: r.id, systemName: r.name }));
     }
   );
 }

@@ -3,6 +3,8 @@ import { aggregateGrants, formatGrants, siteEffectsFor } from '@/data/effects';
 import { effectsForUpgrades } from '@/data/systemEffects';
 import { useUi } from '@/state/uiStore';
 import type {
+    AlnLink,
+    AlnTarget,
     PlanUpgradeRow,
     SystemBalance,
     SystemDetail as SystemDetailDto,
@@ -42,6 +44,14 @@ export function SystemDetail() {
   const [exportWorking, setExportWorking] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [reachableImport, setReachableImport] = useState<{ systemId: number; systemName: string }[]>([]);
+  const [alnLink, setAlnLink] = useState<AlnLink | null>(null);
+  const [alnTargets, setAlnTargets] = useState<AlnTarget[]>([]);
+  const [alnDest, setAlnDest] = useState<number | ''>('');
+  const [alnManual, setAlnManual] = useState(false);
+  const [alnManualName, setAlnManualName] = useState('');
+  const [alnWorking, setAlnWorking] = useState(false);
+  const [alnError, setAlnError] = useState<string | null>(null);
+  const [systemSuggestions, setSystemSuggestions] = useState<{ systemId: number; systemName: string }[]>([]);
 
   useEffect(() => {
     void evesov.prefs.get('detail.section.star').then((v) => {
@@ -77,7 +87,8 @@ export function SystemDetail() {
       evesov.plans.systemBalance(pid, sid),
       evesov.plans.getWorkforceTransfers(pid)
     ]);
-    setAssigned((planSnap?.upgrades ?? []).filter((u) => u.systemId === sid));
+    const systemUpgrades = (planSnap?.upgrades ?? []).filter((u) => u.systemId === sid);
+    setAssigned(systemUpgrades);
     setBalance(b);
     setTransfers(allTransfers);
     if (b?.status === 'export') {
@@ -85,6 +96,14 @@ export function SystemDetail() {
       setReachableImport(reachable);
     } else {
       setReachableImport([]);
+    }
+    if (systemUpgrades.some((u) => u.upgradeName === 'Advanced Logistics Network')) {
+      const { targets, currentLink } = await evesov.plans.getAlnTargets(pid, sid);
+      setAlnTargets(targets);
+      setAlnLink(currentLink);
+    } else {
+      setAlnTargets([]);
+      setAlnLink(null);
     }
   }, []);
 
@@ -127,6 +146,10 @@ export function SystemDetail() {
     setExportAmount('');
     setExportAllUnused(false);
     setExportError(null);
+    setAlnDest('');
+    setAlnManual(false);
+    setAlnManualName('');
+    setAlnError(null);
   }, [systemId, activePlanId]);
 
   const upgradeMap = useMemo(() => {
@@ -393,6 +416,122 @@ export function SystemDetail() {
         </section>
       )}
 
+      {activePlanId !== null && assigned.some((a) => a.upgradeName === 'Advanced Logistics Network') && (
+        <section className="detail__section">
+          <h3>Advanced Logistics Network — Jump Bridge Link</h3>
+          {alnLink && (
+            <p className="transfer-form__summary">
+              Currently linked to: <strong>{alnLink.linkedSystemName}</strong>
+              {alnLink.linkedSystemId === null && <span className="detail__muted-inline"> (manual entry)</span>}
+            </p>
+          )}
+          <form
+            className="transfer-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setAlnWorking(true);
+              setAlnError(null);
+              let id: number | null = null;
+              let name = '';
+              if (!alnManual) {
+                const t = alnTargets.find((t) => t.systemId === alnDest);
+                if (!t) { setAlnWorking(false); return; }
+                id = t.systemId;
+                name = t.systemName;
+              } else {
+                const match = systemSuggestions.find((s) => s.systemName === alnManualName.trim());
+                id = match?.systemId ?? null;
+                name = alnManualName.trim();
+              }
+              void evesov.plans
+                .setAlnLink(activePlanId, systemId, id, name)
+                .then((r) => { if (!r.ok) setAlnError(r.error ?? 'Unknown error'); })
+                .finally(() => setAlnWorking(false));
+            }}
+          >
+            <div className="transfer-form__row">
+              <label className="transfer-form__check">
+                <input
+                  type="checkbox"
+                  checked={alnManual}
+                  onChange={(e) => { setAlnManual(e.target.checked); setAlnDest(''); setAlnManualName(''); }}
+                />
+                Manual entry (cross-alliance)
+              </label>
+            </div>
+            {!alnManual ? (
+              <div className="transfer-form__row">
+                <label className="transfer-form__label">Target System</label>
+                {alnTargets.length === 0 ? (
+                  <span className="detail__muted">No systems within 5 LY — re-seed required to compute distances</span>
+                ) : (
+                  <select
+                    className="transfer-form__select"
+                    value={alnDest}
+                    onChange={(e) => setAlnDest(Number(e.target.value))}
+                  >
+                    <option value="">— select system —</option>
+                    {alnTargets.map((t) => (
+                      <option key={t.systemId} value={t.systemId}>
+                        {t.systemName} ({t.distanceLy.toFixed(2)} LY)
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            ) : (
+              <div className="transfer-form__row">
+                <label className="transfer-form__label">System Name</label>
+                <input
+                  type="text"
+                  className="transfer-form__input"
+                  list="aln-system-suggestions"
+                  value={alnManualName}
+                  onChange={async (e) => {
+                    setAlnManualName(e.target.value);
+                    if (e.target.value.length >= 2) {
+                      const results = await evesov.plans.searchSystems(e.target.value);
+                      setSystemSuggestions(results);
+                    }
+                  }}
+                  placeholder="Type system name…"
+                />
+                <datalist id="aln-system-suggestions">
+                  {systemSuggestions.map((s) => (
+                    <option key={s.systemId} value={s.systemName} />
+                  ))}
+                </datalist>
+              </div>
+            )}
+            {alnError && <p className="transfer-form__error">{alnError}</p>}
+            <div className="transfer-form__actions">
+              <button
+                type="submit"
+                className="transfer-form__submit"
+                disabled={alnWorking || (!alnManual && alnDest === '') || (alnManual && !alnManualName.trim())}
+              >
+                {alnWorking ? 'Saving…' : 'Set Link'}
+              </button>
+              {alnLink && (
+                <button
+                  type="button"
+                  className="transfer-form__remove"
+                  onClick={() => {
+                    void evesov.plans.removeAlnLink(activePlanId, systemId).then(() => {
+                      setAlnLink(null);
+                      setAlnDest('');
+                      setAlnManualName('');
+                    });
+                  }}
+                >
+                  Remove Link
+                </button>
+              )}
+            </div>
+          </form>
+        </section>
+      )}
+
       <div className="detail__columns">
         <div className="detail__columns-inner">
           <section className={`detail__section detail__col-star${starOpen ? '' : ' detail__section--collapsed'}`}>
@@ -510,7 +649,15 @@ export function SystemDetail() {
                         aria-label={`Mark ${a.upgradeName} installed`}
                       />
                     </td>
-                    <td>{a.upgradeName}</td>
+                    <td>
+                      {a.upgradeName}
+                      {a.upgradeName === 'Advanced Logistics Network' && !alnLink && (
+                        <span className="detail__badge detail__badge--warn" title="Set a jump bridge link below">⚠ link required</span>
+                      )}
+                      {a.upgradeName === 'Advanced Logistics Network' && alnLink && (
+                        <span className="detail__badge" title={`Linked to ${alnLink.linkedSystemName}`}>→ {alnLink.linkedSystemName}</span>
+                      )}
+                    </td>
                     <td className={`num${u && u.power < 0 ? ' cost-produces' : ''}`}>{u?.power.toLocaleString() ?? '—'}</td>
                     <td className={`num${u && u.workforce < 0 ? ' cost-produces' : ''}`}>{u?.workforce.toLocaleString() ?? '—'}</td>
                     <td className={`num${u && u.superionicIce < 0 ? ' cost-produces' : ''}`}>{u?.superionicIce.toLocaleString() ?? '—'}</td>

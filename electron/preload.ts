@@ -51,7 +51,15 @@ const api: EveSovApi = {
     getWorkforceTransfers: (planId) =>
       ipcRenderer.invoke('plans.getWorkforceTransfers', planId),
     getReachableImportSystems: (planId, sourceSystemId) =>
-      ipcRenderer.invoke('plans.getReachableImportSystems', planId, sourceSystemId)
+      ipcRenderer.invoke('plans.getReachableImportSystems', planId, sourceSystemId),
+    getAlnTargets: (planId, systemId) =>
+      ipcRenderer.invoke('plans.getAlnTargets', planId, systemId),
+    setAlnLink: (planId, systemId, linkedSystemId, linkedSystemName) =>
+      ipcRenderer.invoke('plans.setAlnLink', planId, systemId, linkedSystemId, linkedSystemName),
+    removeAlnLink: (planId, systemId) =>
+      ipcRenderer.invoke('plans.removeAlnLink', planId, systemId),
+    searchSystems: (query) =>
+      ipcRenderer.invoke('plans.searchSystems', query)
   },
   windows: {
     openPanel: (panelId, params) => ipcRenderer.invoke('windows.openPanel', panelId, params),
