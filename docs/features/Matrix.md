@@ -29,11 +29,11 @@ Reads via IPC only. Backed by `plan_scopes`, `plan_upgrades` (including `install
 - The "Totals" row sticks at `top: 180px`. If sticking breaks, the likely cause is the `overflow: auto` scroll context — verify `border-collapse: separate` is set and the sticky parent is the scroll container, not a wrapper.
 - **Cells are clickable** with a 3-state cycle: empty → todo (○) → installed (●) → empty. Empty stays visually blank; hover background indicates clickability. Backed by existing IPC: `plans.assignUpgrade`, `plans.setUpgradeInstalled`, `plans.removeUpgrade`. The `plan-changed` subscription refreshes after each call, so the totals row updates live.
 - **Formatting bar** (checkboxes, persisted as prefs with `matrix.fmt.*` keys):
-  - `colorSystems` — renders compact Power and Workforce mini-meters under the system name (shared `MiniMeter` from `src/components/MiniMeter.tsx`, also used by `PlanInspector`). Hue tracks consumed/available (green → yellow → red, `--danger` on overflow). Replaces the previous flat heat tint; raw `consumedPower / availablePower / consumedWorkforce / availableWorkforce` are surfaced on each `PlanMatrixSystem` from `plans.matrix`.
-  - `upgradeSymbols` — show compact symbols from `src/data/upgradeSymbols.ts` in column headers. Mapping is currently empty (falls back to full upgrade name); intended to be populated later.
-  - `verticalHeaders` — toggle 45° ↔ 90° header angle (header row height 180 px ↔ 120 px; totals-row sticky `top` follows).
-  - `hideUnused` — filter `allUpgrades` to those with `totals > 0`.
-  - `showInstalled` — render installed (●) vs todo (○) glyphs in cells instead of a uniform dot. Backed by `plan_upgrades.installed` (added via migration).
+    - `colorSystems` — renders compact Power and Workforce mini-meters under the system name (shared `MiniMeter` from `src/components/MiniMeter.tsx`, also used by `PlanInspector`). Hue tracks consumed/available (green → yellow → red, `--danger` on overflow). Replaces the previous flat heat tint; raw `consumedPower / availablePower / consumedWorkforce / availableWorkforce` are surfaced on each `PlanMatrixSystem` from `plans.matrix`.
+    - `upgradeSymbols` — show compact symbols from `src/data/upgradeSymbols.ts` in column headers. Mapping is currently empty (falls back to full upgrade name); intended to be populated later.
+    - `verticalHeaders` — toggle 45° ↔ 90° header angle (header row height 180 px ↔ 120 px; totals-row sticky `top` follows).
+    - `hideUnused` — filter `allUpgrades` to those with `totals > 0`.
+    - `showInstalled` — render installed (●) vs todo (○) glyphs in cells instead of a uniform dot. Backed by `plan_upgrades.installed` (added via migration).
 - **PNG export**: renderer-side `html2canvas` captures the matrix `<div>`, converts to a data URL, sends to main via `exports.capturePng(filename, dataUrl)`; main shows `dialog.showSaveDialog` and writes the file. Opsec redaction (hide names, watermark) is **not yet implemented** — see Exports.md for the planned config layer.
 - `html2canvas` is added as a dependency. It is renderer-only — no ABI concerns.
 
@@ -41,3 +41,4 @@ Reads via IPC only. Backed by `plan_scopes`, `plan_upgrades` (including `install
 
 - Drone-region column grouping or visual distinction.
 - `html2canvas` scroll capture for tables wider than the viewport — may need `scrollX`/`scrollY` options.
+- The workforce and power bars are supposed to be background effects of the cell.
