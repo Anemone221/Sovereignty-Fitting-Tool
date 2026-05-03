@@ -117,8 +117,8 @@ export function runMigrations(db: DB, seedPath?: string): void {
           INSERT OR REPLACE INTO stars (id, system_id, spectral_class, description, power)
             SELECT id, system_id, spectral_class, description, power FROM seed.stars;
 
-          INSERT OR REPLACE INTO planets (id, system_id, name, power, workforce, superionic_ice_per_hour, magmatic_gas_per_hour)
-            SELECT id, system_id, name, power, workforce, superionic_ice_per_hour, magmatic_gas_per_hour FROM seed.planets;
+          INSERT OR REPLACE INTO planets (id, system_id, name, power, workforce, superionic_ice_per_hour, magmatic_gas_per_hour, planet_type)
+            SELECT id, system_id, name, power, workforce, superionic_ice_per_hour, magmatic_gas_per_hour, planet_type FROM seed.planets;
 
           INSERT OR REPLACE INTO upgrades (name, power, workforce, superionic_ice, magmatic_gas, startup, icon)
             SELECT name, power, workforce, superionic_ice, magmatic_gas, startup, icon FROM seed.upgrades;
