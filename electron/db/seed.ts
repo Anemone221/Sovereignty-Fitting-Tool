@@ -25,6 +25,8 @@ const SDE_FILES = [
     "mapSolarSystems.jsonl",
     "mapStars.jsonl",
     "mapStargates.jsonl",
+    "mapPlanets.jsonl",
+    "types.jsonl",
 ];
 
 interface Args {
@@ -250,6 +252,8 @@ async function main() {
         constellations: sdeFiles.get("mapConstellations.jsonl")!,
         solarSystems: sdeFiles.get("mapSolarSystems.jsonl")!,
         stars: sdeFiles.get("mapStars.jsonl")!,
+        planets: sdeFiles.get("mapPlanets.jsonl")!,
+        types: sdeFiles.get("types.jsonl")!,
     };
 
     const csvPaths = {

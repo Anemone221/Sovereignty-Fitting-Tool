@@ -52,6 +52,7 @@ interface PlanetDbRow {
   workforce: number;
   superionic_ice_per_hour: number;
   magmatic_gas_per_hour: number;
+  planet_type: string | null;
 }
 
 interface UpgradeDbRow {
@@ -105,7 +106,8 @@ const toPlanet = (p: PlanetDbRow): Planet => ({
   power: p.power,
   workforce: p.workforce,
   superionicIcePerHour: p.superionic_ice_per_hour,
-  magmaticGasPerHour: p.magmatic_gas_per_hour
+  magmaticGasPerHour: p.magmatic_gas_per_hour,
+  planetType: p.planet_type
 });
 const toUpgrade = (u: UpgradeDbRow): Upgrade => ({
   name: u.name,

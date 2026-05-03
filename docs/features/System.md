@@ -1,14 +1,16 @@
 # System detail
 
 ## Purpose
+
 Primary editing surface for a single system within the active plan. Shows what the system has (star, planets, resource budget), what the plan has assigned to it, what it would grant (sites), and which other upgrades are still available. This is where most of the user's "doing" happens.
 
 ## Schema
+
 Reads from:
 
 - `systems`, `regions`, `constellations`, `stars`, `planets`, `system_budget` view — system context.
 - `stars` also carries: `(no new columns needed — power already present)`
-- `planets` — new column: `planet_type TEXT` (populated from SDE JSONL at seed time).
+- `planets` — column: `planet_type TEXT` (Barren / Gas / Ice / Lava / Oceanic / Plasma / Storm / Temperate / Shattered). Resolved at seed time by joining `mapPlanets.jsonl` (`planetID → typeID`) against `types.jsonl` (filtered to "Planet (…)" type names). Migration in `electron/db/migrations.ts` ALTERs the column on existing user DBs and back-fills from the bundled seed.db.
 - `regions` — new column: `rat_type TEXT` (static mapping seeded at build time, null-sec only).
 - `upgrades` — for the catalogue of assignable upgrades; new columns: `category TEXT`, `upgrade_type TEXT`, `time_required INTEGER` (seconds).
 - `plan_upgrades` — the assignments for the active plan + this system; new column: `installed INTEGER NOT NULL DEFAULT 0`.
@@ -57,7 +59,8 @@ Writes via IPC; never touches SQLite directly.
 - **Upgrade installed/todo**: a checkbox in the leading "Inst." column toggles `plan_upgrades.installed`. `installed = 0` is the default so existing rows are treated as todo. Migration guard: `PRAGMA table_info(plan_upgrades)` check + `ALTER TABLE ADD COLUMN` in `electron/db/connection.ts`. Inspector shows the per-system `installed/total` count, green when complete.
 - **Symbols**: derived at render time from the assigned upgrade list via `upgradeSymbols.ts`. No DB storage. Appear as a symbol row in the system header.
 - **Rat types**: shown under Star only when `security_status < 0`. The `rat_type` column on `regions` is seeded from a static region→rat mapping in the seed script. Null in empire/WH space.
-- **Planet type**: displayed in the planet name column (e.g. "Jita IV - Lava"). Seeded from SDE JSONL `planetTypes` data into `planets.planet_type`.
+- **Planet type**: displayed in the planet name column as `[icon] Name (Type)` — e.g. "🌋 Jita IV (Lava)". Seeded into `planets.planet_type` via `mapPlanets.jsonl` + `types.jsonl` (see Schema). Icons live in `src/assets/planet-icons/` and are surfaced through `PLANET_TYPE_ICONS` in `src/data/mapIcons.ts`.
+- **PI producibility**: a single `Px` pill in the system header shows the highest tier the system can fully produce end-to-end (hover lists the products at that tier). A collapsible "Producible PI" section lists every product the system can make at each tier as 24px icons. Pure renderer-side computation in `src/data/piRecipes.ts` from the planets' types — no DB tables, no IPC. The recipe table is auto-generated from `outside_resources/SDE_Resources/planetSchematics.jsonl`; re-run the generator if CCP changes schematics. Section collapse is persisted under `detail.section.pi`.
 - **Structure cards**: rendered below the budget section. ALN upgrade auto-generates an Ansiblex card (`source: 'upgrade'`) when assigned. Clipboard import uses a `<textarea>` inline form. Sotiyo + Supercapital Production upgrade = Sotiyo flag on system title.
 - Section collapse state is persisted globally (per app, not per system).
 
@@ -66,5 +69,3 @@ Writes via IPC; never touches SQLite directly.
 - Workforce export/import effect on budget calculation — `transfer_amount` is stored but not yet factored into the consumed/available totals.
 - Drone-region overrides for site grants from Threat Detection arrays.
 - Metenox/Athanor/Tatara profitability in structure cards (requires moon scan data + market prices from Data Sync — see Structures.md).
-- System effects (Pulsar, Black Hole, etc.) from effect generators — needs a `system_effect` column derived from star description or a separate SDE table.
-- Bulk-assign / multi-select on the Available-upgrades table.

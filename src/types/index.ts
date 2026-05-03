@@ -36,6 +36,7 @@ export interface Planet {
     workforce: number;
     superionicIcePerHour: number;
     magmaticGasPerHour: number;
+    planetType: string | null;
 }
 
 export interface Upgrade {
@@ -456,6 +457,7 @@ export interface PlanRollupRow extends SystemBalance {
     upgrades: string[];
     installedCount: number;
     totalCount: number;
+    alnLink: AlnLink | null;
 }
 
 export interface PlanRollup {
