@@ -40,7 +40,6 @@ jobs:
                 draft: false
                 prerelease: true
                 release_name: ${{ steps.current-time.outputs.time }} BETA
-                tag_name: BETA
               env:
                 GITHUB_TOKEN: ${{ github.token }}
 
