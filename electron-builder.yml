@@ -1,0 +1,41 @@
+appId: com.evesov.tool
+productName: EVE Sov Tool
+copyright: Copyright © 2024 EVE Sov Tool Contributors
+
+directories:
+    buildResources: build
+    output: dist
+
+files:
+    - out/**/*
+    - resources/seed.db
+    - package.json
+
+# seed.db must be accessible at process.resourcesPath, not inside the asar
+asarUnpack:
+    - resources/seed.db
+
+extraResources:
+    - from: resources/seed.db
+      to: seed.db
+    - from: app.ico
+      to: app.ico
+
+win:
+    target:
+        - target: nsis
+          arch: [x64]
+        - target: zip
+          arch: [x64]
+    icon: app.ico
+
+nsis:
+    oneClick: false
+    allowToChangeInstallationDirectory: true
+    installerIcon: app.ico
+    uninstallerIcon: app.ico
+    createDesktopShortcut: true
+    createStartMenuShortcut: true
+    shortcutName: EVE Sov Tool
+
+publish: null
