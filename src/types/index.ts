@@ -36,6 +36,7 @@ export interface Planet {
     workforce: number;
     superionicIcePerHour: number;
     magmaticGasPerHour: number;
+    planetType: string | null;
 }
 
 export interface Upgrade {

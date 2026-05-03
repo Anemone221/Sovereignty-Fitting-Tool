@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS planets (
   power                    INTEGER NOT NULL DEFAULT 0,
   workforce                INTEGER NOT NULL DEFAULT 0,
   superionic_ice_per_hour  INTEGER NOT NULL DEFAULT 0,
-  magmatic_gas_per_hour    INTEGER NOT NULL DEFAULT 0
+  magmatic_gas_per_hour    INTEGER NOT NULL DEFAULT 0,
+  planet_type              TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_planets_system ON planets(system_id);
 

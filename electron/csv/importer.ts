@@ -123,7 +123,7 @@ export async function importStarsCsv(
 export async function importPlanetsCsv(
   db: DB,
   path: string,
-  maps: Pick<SdeMaps, 'planetToSystem'>
+  maps: Pick<SdeMaps, 'planetToSystem' | 'planetIdToType'>
 ): Promise<ImportReport> {
   const rows = await parseCsv<PlanetsCsvRow>(path);
   const warnings: ImportWarning[] = [];
@@ -134,15 +134,16 @@ export async function importPlanetsCsv(
   );
   const upsert = db.prepare(
     `INSERT INTO planets
-       (id, system_id, name, power, workforce, superionic_ice_per_hour, magmatic_gas_per_hour)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+       (id, system_id, name, power, workforce, superionic_ice_per_hour, magmatic_gas_per_hour, planet_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        system_id                = excluded.system_id,
        name                     = excluded.name,
        power                    = excluded.power,
        workforce                = excluded.workforce,
        superionic_ice_per_hour  = excluded.superionic_ice_per_hour,
-       magmatic_gas_per_hour    = excluded.magmatic_gas_per_hour`
+       magmatic_gas_per_hour    = excluded.magmatic_gas_per_hour,
+       planet_type              = excluded.planet_type`
   );
 
   let imported = 0;
@@ -187,7 +188,8 @@ export async function importPlanetsCsv(
         Math.trunc(num(row.Power)),
         Math.trunc(num(row.Workforce)),
         Math.trunc(num(row['Superionic Ice / Hour'])),
-        Math.trunc(num(row['Magmatic Gas / Hour']))
+        Math.trunc(num(row['Magmatic Gas / Hour'])),
+        maps.planetIdToType.get(planetId) ?? null
       );
       imported++;
     });

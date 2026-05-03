@@ -20,6 +20,37 @@ import effectGamma from '@/assets/map-icons/systemEffects/Gamma.png?inline';
 import effectPlasma from '@/assets/map-icons/systemEffects/Plasma.png?inline';
 import a0Sun from '@/assets/map-icons/systemEffects/A0_Sun.png?inline';
 
+import type { PlanetType } from '@/data/piRecipes';
+
+const planetIconModules = import.meta.glob('@/assets/planet-icons/*.png', {
+  eager: true,
+  query: '?inline',
+  import: 'default',
+}) as Record<string, string>;
+
+const piIconModules = import.meta.glob('@/assets/pi-icons/*.png', {
+  eager: true,
+  query: '?inline',
+  import: 'default',
+}) as Record<string, string>;
+
+function basenameNoExt(path: string): string {
+  const file = path.split('/').pop() ?? path;
+  return file.replace(/\.png$/i, '');
+}
+
+const PLANET_TYPE_ICONS_RAW: Record<string, string> = {};
+for (const [path, url] of Object.entries(planetIconModules)) {
+  PLANET_TYPE_ICONS_RAW[basenameNoExt(path)] = url;
+}
+export const PLANET_TYPE_ICONS: Record<PlanetType | 'Moon' | 'Shattered', string> =
+  PLANET_TYPE_ICONS_RAW as Record<PlanetType | 'Moon' | 'Shattered', string>;
+
+export const PI_PRODUCT_ICONS: Record<string, string> = {};
+for (const [path, url] of Object.entries(piIconModules)) {
+  PI_PRODUCT_ICONS[basenameNoExt(path)] = url;
+}
+
 export const STRUCTURE_ICONS: Record<string, string> = {
   Keepstar: citadelXL,
   Fortizar: citadelL,

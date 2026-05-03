@@ -8,12 +8,15 @@ export interface SdePaths {
   constellations: string;
   solarSystems: string;
   stars: string;
+  planets: string;
+  types: string;
 }
 
 export interface SdeMaps {
   planetToSystem: Map<number, number>;
   starToSystem: Map<number, number>;
   starSpectralClass: Map<number, string | null>;
+  planetIdToType: Map<number, string>;
 }
 
 interface RegionRow {
@@ -47,6 +50,29 @@ interface StarRow {
   statistics?: { spectralClass?: string };
 }
 
+interface PlanetRow {
+  _key: number;
+  typeID: number;
+}
+
+interface TypeRow {
+  _key: number;
+  groupID?: number;
+  name?: { en?: string };
+}
+
+const PLANET_TYPE_NAMES: Record<string, string> = {
+  'Planet (Barren)': 'Barren',
+  'Planet (Gas)': 'Gas',
+  'Planet (Ice)': 'Ice',
+  'Planet (Lava)': 'Lava',
+  'Planet (Oceanic)': 'Oceanic',
+  'Planet (Plasma)': 'Plasma',
+  'Planet (Storm)': 'Storm',
+  'Planet (Temperate)': 'Temperate',
+  'Planet (Shattered)': 'Shattered',
+};
+
 interface StargateRow {
   _key: number;
   solarSystemID: number;
@@ -78,10 +104,25 @@ export async function importSde(db: DB, paths: SdePaths): Promise<{ report: Impo
   const constellations = await readJsonl<ConstellationRow>(paths.constellations);
   const solarSystems = await readJsonl<SolarSystemRow>(paths.solarSystems);
   const stars = await readJsonl<StarRow>(paths.stars);
+  const planetRows = await readJsonl<PlanetRow>(paths.planets);
+  const typeRows = await readJsonl<TypeRow>(paths.types);
 
   const planetToSystem = new Map<number, number>();
   const starToSystem = new Map<number, number>();
   const starSpectralClass = new Map<number, string | null>();
+  const planetIdToType = new Map<number, string>();
+
+  const planetTypeIdToName = new Map<number, string>();
+  for (const { row } of typeRows) {
+    const en = row.name?.en;
+    if (!en) continue;
+    const short = PLANET_TYPE_NAMES[en];
+    if (short) planetTypeIdToName.set(row._key, short);
+  }
+  for (const { row } of planetRows) {
+    const t = planetTypeIdToName.get(row.typeID);
+    if (t) planetIdToType.set(row._key, t);
+  }
 
   const insertRegion = db.prepare(
     'INSERT OR REPLACE INTO regions (id, name, faction_id) VALUES (?, ?, ?)'
@@ -144,7 +185,7 @@ export async function importSde(db: DB, paths: SdePaths): Promise<{ report: Impo
 
   return {
     report: { counts, warnings },
-    maps: { planetToSystem, starToSystem, starSpectralClass }
+    maps: { planetToSystem, starToSystem, starSpectralClass, planetIdToType }
   };
 }
 

@@ -56,6 +56,24 @@ export function runMigrations(db: DB, seedPath?: string): void {
     }
   }
 
+  const planetCols = (
+    db.prepare('PRAGMA table_info(planets)').all() as { name: string }[]
+  ).map((r) => r.name);
+  if (!planetCols.includes('planet_type')) {
+    db.exec('ALTER TABLE planets ADD COLUMN planet_type TEXT');
+  }
+
+  // Backfill planet_type from seed.db if this user DB has planets with NULL planet_type.
+  const missingPlanetType = (db.prepare('SELECT COUNT(*) AS n FROM planets WHERE planet_type IS NULL').get() as { n: number }).n;
+  if (missingPlanetType > 0 && seedPath && existsSync(seedPath)) {
+    db.exec(`ATTACH DATABASE '${seedPath.replace(/'/g, "''")}' AS seed`);
+    try {
+      db.prepare('UPDATE planets SET planet_type = (SELECT planet_type FROM seed.planets sp WHERE sp.id = planets.id) WHERE planet_type IS NULL').run();
+    } finally {
+      db.exec('DETACH DATABASE seed');
+    }
+  }
+
   const regionCols = (
     db.prepare('PRAGMA table_info(regions)').all() as { name: string }[]
   ).map((r) => r.name);

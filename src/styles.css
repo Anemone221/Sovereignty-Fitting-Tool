@@ -847,15 +847,23 @@ thead .matrix__sticky-col { z-index: 3; background: var(--bg-elev); }
 .matrix--vertical .matrix__totals-row th { top: 120px; }
 .matrix__corner--vertical { height: 120px; }
 
-/* Power/Workforce bars stacked under the system name when 'Color systems' is on */
-.matrix__system-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 4px;
+/* Usage column: compact Power/Workforce mini-meters in a dedicated cell */
+.matrix__usage-cell {
+  padding: 4px 8px;
+  vertical-align: middle;
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
 }
-.matrix__system-bars .mini-meter { font-size: 9px; }
-.matrix__system-bars .mini-meter__track { width: 80px; }
+.matrix__usage-cell .mini-meter { display: flex; font-size: 9px; }
+.matrix__usage-cell .mini-meter + .mini-meter { margin-top: 2px; }
+.matrix__usage-cell .mini-meter__track { width: 80px; }
+.matrix__usage-header {
+  font-size: 11px;
+  color: var(--fg-mute);
+  text-align: center;
+  vertical-align: bottom;
+  padding-bottom: 6px;
+}
 
 /* Clickable cell: button fills the td so the whole cell is the hit target */
 .matrix__cell--clickable { padding: 0; }
@@ -1145,8 +1153,6 @@ thead .matrix__sticky-col { z-index: 3; background: var(--bg-elev); }
 /* ===== Op-sec capture-time redactions =====
    Toggled via data-opsec-* attributes on <body> by OpsecRoot,
    which only emits attributes while withOpsecCapture is active. */
-body[data-opsec-pw-visual="1"] .matrix__system-bars,
-body[data-opsec-wf-visual="1"] .matrix__system-bars { display: none !important; }
 body[data-opsec-wf-visual="1"] .status-tag { display: none !important; }
 body[data-opsec-pw-percent="1"] .mini-meter__pct,
 body[data-opsec-wf-percent="1"] .mini-meter__pct { visibility: hidden; }
@@ -1166,3 +1172,54 @@ body[data-opsec-supercaps="1"] [data-supercap="1"] { color: transparent !importa
 .exports__dna-message--err { background: rgba(248, 81, 73, 0.1); color: var(--danger); border: 1px solid var(--danger); }
 .exports__dna-hint { color: var(--fg-dim); font-size: 11px; margin: 0; }
 .exports__dna-hint code { background: var(--bg-elev-2); padding: 1px 4px; border-radius: 3px; }
+
+.detail__planet-icon {
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 6px;
+    object-fit: contain;
+}
+.detail__planet-type { color: var(--fg-dim); }
+
+.detail__pi-tier {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 11px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    background: var(--bg-elev-2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+}
+.detail__pi-tier--p1 { background: #2c4a2c; border-color: #3e6e3e; }
+.detail__pi-tier--p2 { background: #2c3f4a; border-color: #3e5d70; }
+.detail__pi-tier--p3 { background: #4a3f2c; border-color: #70583e; }
+.detail__pi-tier--p4 { background: #4a2c46; border-color: #703e68; }
+
+.detail__pi-products { display: flex; flex-direction: column; gap: 8px; }
+.detail__pi-row { display: flex; align-items: flex-start; gap: 12px; }
+.detail__pi-row-label {
+    flex: 0 0 28px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fg-dim);
+    padding-top: 4px;
+}
+.detail__pi-row-items { display: flex; flex-wrap: wrap; gap: 6px; }
+.detail__pi-product { width: 24px; height: 24px; object-fit: contain; }
+.detail__pi-product--text {
+    width: auto;
+    height: auto;
+    padding: 2px 6px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--fg-dim);
+}

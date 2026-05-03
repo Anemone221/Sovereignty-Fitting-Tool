@@ -1,6 +1,11 @@
 import { evesov } from "@/api/evesov";
 import { aggregateGrants, formatGrants, siteEffectsFor } from "@/data/effects";
-import { a0Sun } from "@/data/mapIcons";
+import { a0Sun, PI_PRODUCT_ICONS, PLANET_TYPE_ICONS } from "@/data/mapIcons";
+import {
+    highestProducibleTier,
+    producibleFromPlanets,
+    type PlanetType,
+} from "@/data/piRecipes";
 import { badgesForUpgrades } from "@/data/systemEffects";
 import { upgradeTypeKey } from "@shared/upgradeTypes";
 import { useUi } from "@/state/uiStore";
@@ -86,6 +91,7 @@ export function SystemDetail() {
         { systemId: number; systemName: string }[]
     >([]);
     const [structuresOpen, setStructuresOpen] = useState(true);
+    const [piOpen, setPiOpen] = useState(true);
     const [structures, setStructures] = useState<PlanStructure[]>([]);
     const [structAddType, setStructAddType] =
         useState<StructureType>("Ansiblex");
@@ -110,6 +116,9 @@ export function SystemDetail() {
         void evesov.prefs.get("detail.section.structures").then((v) => {
             if (v !== null) setStructuresOpen(v !== "0");
         });
+        void evesov.prefs.get("detail.section.pi").then((v) => {
+            if (v !== null) setPiOpen(v !== "0");
+        });
     }, []);
 
     const toggleStar = () => {
@@ -133,6 +142,13 @@ export function SystemDetail() {
                 "detail.section.structures",
                 next ? "1" : "0",
             );
+            return next;
+        });
+    };
+    const togglePi = () => {
+        setPiOpen((prev) => {
+            const next = !prev;
+            void evesov.prefs.set("detail.section.pi", next ? "1" : "0");
             return next;
         });
     };
@@ -279,6 +295,14 @@ export function SystemDetail() {
         [assigned, sec],
     );
 
+    const producible = useMemo(() => {
+        const types = (detail?.planets ?? []).map(
+            (p) => (p.planetType as PlanetType | null) ?? null,
+        );
+        return producibleFromPlanets(types);
+    }, [detail]);
+    const topTier = highestProducibleTier(producible);
+
     if (systemId === null) {
         return (
             <div className="detail detail--empty">
@@ -339,6 +363,14 @@ export function SystemDetail() {
                             title={`A0 Sun — ${star.description}`}
                             className="effect-badge__icon effect-badge__icon--lg"
                         />
+                    )}
+                    {topTier > 0 && (
+                        <span
+                            className={`detail__pi-tier detail__pi-tier--p${topTier}`}
+                            title={`Producible in this system: ${[...producible[`p${topTier}` as 'p1' | 'p2' | 'p3' | 'p4']].sort().join(', ')}`}
+                        >
+                            P{topTier}
+                        </span>
                     )}
                     {activePlanId !== null && budget.sovEligible && (
                         <label
@@ -1051,9 +1083,33 @@ export function SystemDetail() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {planets.map((p) => (
+                                        {planets.map((p) => {
+                                            const icon = p.planetType
+                                                ? PLANET_TYPE_ICONS[
+                                                      p.planetType as PlanetType
+                                                  ]
+                                                : null;
+                                            return (
                                             <tr key={p.id}>
-                                                <td>{p.name}</td>
+                                                <td>
+                                                    {icon && (
+                                                        <img
+                                                            src={icon}
+                                                            alt={
+                                                                p.planetType ??
+                                                                ""
+                                                            }
+                                                            className="detail__planet-icon"
+                                                        />
+                                                    )}
+                                                    {p.name}
+                                                    {p.planetType && (
+                                                        <span className="detail__planet-type">
+                                                            {" "}
+                                                            ({p.planetType})
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td className="num">
                                                     {p.power.toLocaleString()}
                                                 </td>
@@ -1067,7 +1123,8 @@ export function SystemDetail() {
                                                     {p.magmaticGasPerHour.toLocaleString()}
                                                 </td>
                                             </tr>
-                                        ))}
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             ) : (
@@ -1078,6 +1135,76 @@ export function SystemDetail() {
                     </section>
                 </div>
             </div>
+
+            {topTier > 0 && (
+                <section
+                    className={`detail__section${piOpen ? "" : " detail__section--collapsed"}`}
+                >
+                    <button
+                        type="button"
+                        className="detail__section-toggle"
+                        onClick={togglePi}
+                        aria-expanded={piOpen}
+                    >
+                        <span className="tree__chevron">
+                            {piOpen ? "▾" : "▸"}
+                        </span>
+                        <h3>
+                            Producible PI (
+                            {producible.p1.size +
+                                producible.p2.size +
+                                producible.p3.size +
+                                producible.p4.size}
+                            )
+                        </h3>
+                    </button>
+                    {piOpen && (
+                        <div className="detail__pi-products">
+                            {([1, 2, 3, 4] as const).map((tier) => {
+                                const set =
+                                    producible[
+                                        `p${tier}` as "p1" | "p2" | "p3" | "p4"
+                                    ];
+                                if (set.size === 0) return null;
+                                const items = [...set].sort();
+                                return (
+                                    <div
+                                        key={tier}
+                                        className="detail__pi-row"
+                                    >
+                                        <span className="detail__pi-row-label">
+                                            P{tier}
+                                        </span>
+                                        <div className="detail__pi-row-items">
+                                            {items.map((name) => {
+                                                const src =
+                                                    PI_PRODUCT_ICONS[name];
+                                                return src ? (
+                                                    <img
+                                                        key={name}
+                                                        src={src}
+                                                        alt={name}
+                                                        title={name}
+                                                        className="detail__pi-product"
+                                                    />
+                                                ) : (
+                                                    <span
+                                                        key={name}
+                                                        className="detail__pi-product detail__pi-product--text"
+                                                        title={name}
+                                                    >
+                                                        {name}
+                                                    </span>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </section>
+            )}
 
             {aggregatedGrants.length > 0 && (
                 <section className="detail__section">
