@@ -18,6 +18,8 @@ asarUnpack:
 extraResources:
     - from: resources/seed.db
       to: seed.db
+    - from: app.ico
+      to: app.ico
 
 win:
     target:
@@ -25,13 +27,13 @@ win:
           arch: [x64]
         - target: zip
           arch: [x64]
-    #icon: build/icon.ico
+    icon: app.ico
 
 nsis:
     oneClick: false
     allowToChangeInstallationDirectory: true
-    # installerIcon: build/icon.ico
-    # uninstallerIcon: build/icon.ico
+    installerIcon: app.ico
+    uninstallerIcon: app.ico
     createDesktopShortcut: true
     createStartMenuShortcut: true
     shortcutName: EVE Sov Tool

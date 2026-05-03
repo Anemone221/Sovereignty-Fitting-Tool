@@ -8,11 +8,16 @@ import { closeDb } from './db/userDb.js';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 function createMainWindow(): BrowserWindow {
+  const icon = is.dev
+    ? join(__dirname, '../../app.ico')
+    : join(process.resourcesPath, 'app.ico');
+
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
     show: false,
     autoHideMenuBar: true,
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/preload.mjs'),
       sandbox: false,
