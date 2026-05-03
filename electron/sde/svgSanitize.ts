@@ -12,10 +12,6 @@ export interface LegendIcons {
   Tatara: string;
   Athanor: string;
   // Upgrades / features (below node)
-  miningFrigate: string;
-  miningBarge: string;
-  industrialCommand: string;
-  combatSite: string;
   jumpPortal: string;
   cynoBeacon: string;
   cynoJammer: string;
@@ -39,10 +35,6 @@ export function loadLegendIcons(srcRoot: string): LegendIcons {
     Raitaru:          i('src/assets/map-icons/engineeringComplexMedium.png'),
     Tatara:           i('src/assets/map-icons/refineryLarge.png'),
     Athanor:          i('src/assets/map-icons/refineryMedium.png'),
-    miningFrigate:    i('src/assets/map-icons/miningFrigate_16.png'),
-    miningBarge:      i('src/assets/map-icons/miningBarge_16.png'),
-    industrialCommand:i('src/assets/map-icons/industrialCommand_16.png'),
-    combatSite:       i('src/assets/map-icons/combatSite_16.png'),
     jumpPortal:       i('src/assets/map-icons/jumpPortalArray.png'),
     cynoBeacon:       i('src/assets/map-icons/cynosuralBeacon.png'),
     cynoJammer:       i('src/assets/map-icons/cynosuralSystemJammer.png'),
@@ -128,14 +120,10 @@ function buildSections(icons: LegendIcons): LegendSection[] {
         { src: icons.Athanor,           caption: 'Athanor' },
       ],
       right: [
-        { src: icons.miningFrigate,     caption: 'Mining T1' },
-        { src: icons.miningBarge,       caption: 'Mining T2' },
-        { src: icons.industrialCommand, caption: 'Mining T3' },
-        { src: icons.combatSite,        caption: 'Combat' },
         { src: icons.jumpPortal,        caption: 'Ansiblex' },
         { src: icons.cynoBeacon,        caption: 'Cyno Beacon' },
         { src: icons.cynoJammer,        caption: 'Cyno Jammer' },
-        { src: icons.relicSite,         caption: 'Relic Sites' },
+        { src: icons.relicSite,         caption: 'Exploration' },
       ],
     },
     {

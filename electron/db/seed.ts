@@ -171,11 +171,26 @@ async function downloadSde(tmpDir: string): Promise<Map<string, string>> {
     return files;
 }
 
+const LEGEND_UPGRADE_ICONS: { field: keyof ReturnType<typeof loadLegendIcons>; name: string }[] = [
+    { field: 'jumpPortal',  name: 'Advanced Logistics Network' },
+    { field: 'cynoBeacon',  name: 'Cynosural Navigation' },
+    { field: 'cynoJammer',  name: 'Cynosural Suppression' },
+    { field: 'relicSite',   name: 'Exploration Detector 1' },
+];
+
 async function fetchDotlanSvgs(
     db: ReturnType<typeof openDatabase>,
     downloader: (url: string) => Promise<Buffer>,
 ): Promise<ImportReport> {
     const icons = loadLegendIcons(ROOT);
+
+    const iconRow = db.prepare('SELECT icon FROM upgrades WHERE name = ?');
+    for (const { field, name } of LEGEND_UPGRADE_ICONS) {
+        const row = iconRow.get(name) as { icon: Buffer | null } | undefined;
+        if (row?.icon) {
+            icons[field] = 'data:image/png;base64,' + row.icon.toString('base64');
+        }
+    }
 
     type RegionRow = { id: number; name: string };
     const regions = db
