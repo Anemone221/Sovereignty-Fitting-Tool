@@ -18,7 +18,7 @@ jobs:
                   cache: npm
 
             - name: Install dependencies
-              run: npm ci
+              run: npm i
 
             - name: Generate Seed Database
               run: npm run seed
