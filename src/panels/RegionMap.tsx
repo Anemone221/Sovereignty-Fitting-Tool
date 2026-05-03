@@ -17,6 +17,7 @@ import {
   jumpPortal,
   relicSite,
 } from '@/data/mapIcons';
+import { siteEffectsFor, aggregateGrants, formatGrants } from '@/data/effects';
 
 const MAP_PREFS_KEY = 'map.selectedRegionId';
 // Dotlan system node: <use x y> places top-left of the 56×28 symbol.
@@ -174,18 +175,26 @@ export function RegionMap() {
 
     // Remove any previous overlay groups
     svgEl.querySelector('#evesov-aura')?.remove();
+    svgEl.querySelector('#evesov-lines')?.remove();
     svgEl.querySelector('#evesov-overlay')?.remove();
 
     const pos = positionsRef.current;
     const NS = 'http://www.w3.org/2000/svg';
     const XLINK = 'http://www.w3.org/1999/xlink';
 
-    // Aura group inserted before <g id="sysuse"> so it renders behind system nodes.
+    // Both aura and ALN lines are inserted before <g id="sysuse"> so they render behind nodes.
     const auraG = document.createElementNS(NS, 'g');
     auraG.id = 'evesov-aura';
+    const linesG = document.createElementNS(NS, 'g');
+    linesG.id = 'evesov-lines';
     const sysuse = svgEl.querySelector('#sysuse');
-    if (sysuse?.parentNode) sysuse.parentNode.insertBefore(auraG, sysuse);
-    else svgEl.appendChild(auraG);
+    if (sysuse?.parentNode) {
+      sysuse.parentNode.insertBefore(auraG, sysuse);
+      sysuse.parentNode.insertBefore(linesG, sysuse);
+    } else {
+      svgEl.appendChild(auraG);
+      svgEl.appendChild(linesG);
+    }
 
     for (const [idStr, count] of Object.entries(auraData.aura)) {
       const id = Number(idStr);
@@ -211,8 +220,9 @@ export function RegionMap() {
     const ICON_SIZE = 16;
     const ICON_GAP = 2;
 
-    // Helper: create a row of <image> elements centred on cx, with top of row at rowY
-    const addIconRow = (icons: string[], cx: number, rowY: number) => {
+    // Helper: create a row of <image> elements centred on cx, with top of row at rowY.
+    // tooltips[i], if provided, is attached as a <title> child for native SVG hover text.
+    const addIconRow = (icons: string[], cx: number, rowY: number, tooltips?: string[]) => {
       const rowW = icons.length * ICON_SIZE + (icons.length - 1) * ICON_GAP;
       const startX = cx - rowW / 2;
       icons.forEach((src, i) => {
@@ -223,6 +233,12 @@ export function RegionMap() {
         img.setAttribute('height', String(ICON_SIZE));
         img.setAttributeNS(XLINK, 'xlink:href', src);
         img.setAttribute('href', src);
+        const tip = tooltips?.[i];
+        if (tip) {
+          const title = document.createElementNS(NS, 'title');
+          title.textContent = tip;
+          img.appendChild(title);
+        }
         g.appendChild(img);
       });
     };
@@ -252,7 +268,7 @@ export function RegionMap() {
       path.setAttribute('stroke-dasharray', '6 3');
       path.setAttribute('fill', 'none');
       path.setAttribute('opacity', '0.85');
-      g.appendChild(path);
+      linesG.appendChild(path);
     }
 
     // 3. Per-system icons (above system nodes)
@@ -262,24 +278,55 @@ export function RegionMap() {
       const cx = p.x + NODE_CX;
 
       const structureIcons = sys.structureTypes.map((t) => STRUCTURE_ICONS[t]).filter(Boolean);
+      const structureTips = sys.structureTypes.filter((t) => STRUCTURE_ICONS[t]);
+
       const upgradeIcons: string[] = [];
-      if (sys.miningTier !== null) upgradeIcons.push(MINING_ICONS[sys.miningTier]);
-      if (sys.hasCombatSites) upgradeIcons.push(combatSite);
-      if (sys.hasAnsiblex) upgradeIcons.push(jumpPortal);
-      if (sys.hasCynoBeacon) upgradeIcons.push(cynoBeacon);
-      if (sys.hasCynoJammer) upgradeIcons.push(cynoJammer);
-      if (sys.hasRelicSites) upgradeIcons.push(relicSite);
+      const upgradeTips: string[] = [];
+
+      if (sys.miningTier !== null) {
+        upgradeIcons.push(MINING_ICONS[sys.miningTier]);
+        const grants = formatGrants(
+          aggregateGrants(sys.miningUpgrades.map((u) => siteEffectsFor(u, sys.trueSec))),
+        );
+        const names = sys.miningUpgrades.join(', ');
+        upgradeTips.push(grants ? `${names}\nSpawns: ${grants}` : names);
+      }
+      if (sys.hasCombatSites) {
+        upgradeIcons.push(combatSite);
+        const grants = formatGrants(
+          aggregateGrants(sys.combatUpgrades.map((u) => siteEffectsFor(u, sys.trueSec))),
+        );
+        const names = sys.combatUpgrades.join(', ');
+        upgradeTips.push(grants ? `${names}\nSpawns: ${grants}` : names);
+      }
+      if (sys.hasAnsiblex) {
+        upgradeIcons.push(jumpPortal);
+        upgradeTips.push('Advanced Logistics Network\nEnables Ansiblex jump bridge');
+      }
+      if (sys.hasCynoBeacon) {
+        upgradeIcons.push(cynoBeacon);
+        upgradeTips.push('Cynosural Navigation\nEnables cynosural beacon');
+      }
+      if (sys.hasCynoJammer) {
+        upgradeIcons.push(cynoJammer);
+        upgradeTips.push('Cynosural Suppression\nBlocks cynos (except covert)');
+      }
+      if (sys.hasRelicSites) {
+        upgradeIcons.push(relicSite);
+        upgradeTips.push('Exploration Detector Array\nSpawns relic and data sites');
+      }
       if (sys.stabilityEffect && STABILITY_ICONS[sys.stabilityEffect]) {
         upgradeIcons.push(STABILITY_ICONS[sys.stabilityEffect]);
+        upgradeTips.push(sys.stabilityEffect);
       }
 
       // Structure icons above node: bottom of row sits just above the node top
       if (structureIcons.length > 0) {
-        addIconRow(structureIcons, cx, p.y - ICON_SIZE - 2);
+        addIconRow(structureIcons, cx, p.y - ICON_SIZE - 2, structureTips);
       }
       // Upgrade icons below node: top of row sits just below the node bottom
       if (upgradeIcons.length > 0) {
-        addIconRow(upgradeIcons, cx, p.y + NODE_H + 2);
+        addIconRow(upgradeIcons, cx, p.y + NODE_H + 2, upgradeTips);
       }
     }
 
@@ -287,6 +334,7 @@ export function RegionMap() {
 
     return () => {
       svgEl.querySelector('#evesov-aura')?.remove();
+      svgEl.querySelector('#evesov-lines')?.remove();
       svgEl.querySelector('#evesov-overlay')?.remove();
     };
   }, [overlay, auraData, positions]);
@@ -316,6 +364,52 @@ export function RegionMap() {
     setSelectedRegionId(id);
     void evesov.prefs.set(MAP_PREFS_KEY, String(id));
   };
+
+  const handleExportSvg = useCallback(async () => {
+    if (!svgContainerRef.current || activePlanId === null) return;
+    setExporting(true);
+    try {
+      const got = await evesov.plans.get(activePlanId);
+      if (!got) return;
+      const svgText = await withOpsecCapture(async () => {
+        const svgEl = svgContainerRef.current!.querySelector('svg');
+        if (!svgEl) return '';
+        const vb = svgEl.getAttribute('viewBox');
+        const [, , vbW, vbH] = vb ? vb.split(' ').map(Number) : [0, 0, 0, 0];
+        const clone = svgEl.cloneNode(true) as SVGSVGElement;
+        clone.setAttribute('width', String(vbW));
+        clone.setAttribute('height', String(vbH));
+        // Embed a dark background rect so the SVG looks the same when opened standalone.
+        const NS = 'http://www.w3.org/2000/svg';
+        const bg = document.createElementNS(NS, 'rect');
+        const [vbX, vbY] = vb ? vb.split(' ').map(Number) : [0, 0];
+        bg.setAttribute('x', String(vbX));
+        bg.setAttribute('y', String(vbY));
+        bg.setAttribute('width', String(vbW));
+        bg.setAttribute('height', String(vbH));
+        bg.setAttribute('fill', '#111111');
+        clone.insertBefore(bg, clone.firstChild);
+        return new XMLSerializer().serializeToString(clone);
+      });
+      if (!svgText) return;
+      const regionName = planRegions.find((r) => r.id === selectedRegionId)?.name ?? 'region';
+      const filename = buildExportFilename({
+        planName: got.plan.name,
+        panel: 'regionMap',
+        systemName: regionName,
+        ext: 'svg',
+      });
+      await evesov.exports.captureSvg(filename, svgText, {
+        planId: activePlanId,
+        planName: got.plan.name,
+        panel: 'regionMap',
+        systemName: regionName,
+        opsecPreset: useOpsec.getState().preset
+      });
+    } finally {
+      setExporting(false);
+    }
+  }, [activePlanId, planRegions, selectedRegionId]);
 
   const handleExport = useCallback(async () => {
     if (!svgContainerRef.current || activePlanId === null) return;
@@ -401,6 +495,14 @@ export function RegionMap() {
           disabled={exporting || !svgContent}
         >
           {exporting ? 'Exporting…' : 'Export PNG'}
+        </button>
+        <button
+          type="button"
+          className="region-map__export-btn"
+          onClick={handleExportSvg}
+          disabled={exporting || !svgContent}
+        >
+          {exporting ? 'Exporting…' : 'Export SVG'}
         </button>
       </div>
 

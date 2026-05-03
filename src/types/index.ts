@@ -240,10 +240,13 @@ export interface StructureNode {
 
 export interface MapSystemOverlay {
     systemId: number;
+    trueSec: number | null;
     structureTypes: string[];
     stabilityEffect: string | null;
     miningTier: 1 | 2 | 3 | null;
+    miningUpgrades: string[];
     hasCombatSites: boolean;
+    combatUpgrades: string[];
     hasAnsiblex: boolean;
     hasCynoBeacon: boolean;
     hasCynoJammer: boolean;
@@ -374,6 +377,11 @@ export interface EveSovApi {
         capturePng: (
             filename: string,
             dataUrl: string,
+            meta?: CapturePngMeta,
+        ) => Promise<{ saved: boolean; path?: string; logId?: number }>;
+        captureSvg: (
+            filename: string,
+            svgContent: string,
             meta?: CapturePngMeta,
         ) => Promise<{ saved: boolean; path?: string; logId?: number }>;
         list: (planId?: number | null) => Promise<ExportLogEntry[]>;

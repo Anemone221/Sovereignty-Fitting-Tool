@@ -63,6 +63,13 @@ export function registerMapIpc(): void {
         )
         .all(planId, regionId, regionId) as AlnRow[];
 
+      // Security status per system in this region (for tooltip site calculations)
+      type SecRow = { id: number; security_status: number | null };
+      const secRows = db
+        .prepare('SELECT id, security_status FROM systems WHERE region_id = ?')
+        .all(regionId) as SecRow[];
+      const secMap = new Map<number, number | null>(secRows.map((r) => [r.id, r.security_status]));
+
       // Build per-system overlay map
       const overlayMap = new Map<number, MapSystemOverlay>();
 
@@ -70,10 +77,13 @@ export function registerMapIpc(): void {
         if (!overlayMap.has(systemId)) {
           overlayMap.set(systemId, {
             systemId,
+            trueSec: secMap.get(systemId) !== undefined ? secMap.get(systemId)! : null,
             structureTypes: [],
             stabilityEffect: null,
             miningTier: null,
+            miningUpgrades: [],
             hasCombatSites: false,
+            combatUpgrades: [],
             hasAnsiblex: false,
             hasCynoBeacon: false,
             hasCynoJammer: false,
@@ -96,11 +106,13 @@ export function registerMapIpc(): void {
           if (overlay.miningTier === null || tier > overlay.miningTier) {
             overlay.miningTier = tier;
           }
+          if (!overlay.miningUpgrades.includes(name)) overlay.miningUpgrades.push(name);
           continue;
         }
 
         if (THREAT_RE.test(name)) {
           overlay.hasCombatSites = true;
+          if (!overlay.combatUpgrades.includes(name)) overlay.combatUpgrades.push(name);
           continue;
         }
 
