@@ -38,6 +38,20 @@ export function registerMapIpc(): void {
         )
         .all(planId, regionId) as UpgradeRow[];
 
+      // Icons stored in the upgrades table for any upgrade name used in this region.
+      type IconRow = { name: string; icon: Buffer | null };
+      const uniqueNames = [...new Set(upgradeRows.map((r) => r.upgrade_name))];
+      const upgradeIcons: Record<string, string> = {};
+      if (uniqueNames.length > 0) {
+        const placeholders = uniqueNames.map(() => '?').join(',');
+        const iconRows = db
+          .prepare(`SELECT name, icon FROM upgrades WHERE icon IS NOT NULL AND name IN (${placeholders})`)
+          .all(...uniqueNames) as IconRow[];
+        for (const { name, icon } of iconRows) {
+          if (icon) upgradeIcons[name] = 'data:image/png;base64,' + icon.toString('base64');
+        }
+      }
+
       // Structures per system in this region for this plan
       type StructureRow = { system_id: number; structure_type: string };
       const structureRows = db
@@ -63,6 +77,13 @@ export function registerMapIpc(): void {
         )
         .all(planId, regionId, regionId) as AlnRow[];
 
+      // Security status per system in this region (for tooltip site calculations)
+      type SecRow = { id: number; security_status: number | null };
+      const secRows = db
+        .prepare('SELECT id, security_status FROM systems WHERE region_id = ?')
+        .all(regionId) as SecRow[];
+      const secMap = new Map<number, number | null>(secRows.map((r) => [r.id, r.security_status]));
+
       // Build per-system overlay map
       const overlayMap = new Map<number, MapSystemOverlay>();
 
@@ -70,14 +91,18 @@ export function registerMapIpc(): void {
         if (!overlayMap.has(systemId)) {
           overlayMap.set(systemId, {
             systemId,
+            trueSec: secMap.get(systemId) !== undefined ? secMap.get(systemId)! : null,
             structureTypes: [],
             stabilityEffect: null,
             miningTier: null,
+            miningUpgrades: [],
             hasCombatSites: false,
+            combatUpgrades: [],
             hasAnsiblex: false,
             hasCynoBeacon: false,
             hasCynoJammer: false,
             hasRelicSites: false,
+            relicUpgrades: [],
           });
         }
         return overlayMap.get(systemId)!;
@@ -96,16 +121,19 @@ export function registerMapIpc(): void {
           if (overlay.miningTier === null || tier > overlay.miningTier) {
             overlay.miningTier = tier;
           }
+          if (!overlay.miningUpgrades.includes(name)) overlay.miningUpgrades.push(name);
           continue;
         }
 
         if (THREAT_RE.test(name)) {
           overlay.hasCombatSites = true;
+          if (!overlay.combatUpgrades.includes(name)) overlay.combatUpgrades.push(name);
           continue;
         }
 
         if (EXPLORATION_RE.test(name)) {
           overlay.hasRelicSites = true;
+          if (!overlay.relicUpgrades.includes(name)) overlay.relicUpgrades.push(name);
           continue;
         }
 
@@ -154,6 +182,7 @@ export function registerMapIpc(): void {
       return {
         systems: Array.from(overlayMap.values()),
         alnPairs,
+        upgradeIcons,
       };
     },
   );

@@ -123,6 +123,44 @@ export function registerExportsIpc(): void {
     }
   );
 
+  ipcMain.handle(
+    'exports.captureSvg',
+    async (
+      event,
+      filename: string,
+      svgContent: string,
+      meta?: CapturePngMeta
+    ): Promise<CapturePngResult> => {
+      const win = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+      const result = await dialog.showSaveDialog(win!, {
+        title: 'Export SVG',
+        defaultPath: filename,
+        filters: [{ name: 'SVG image', extensions: ['svg'] }]
+      });
+      if (result.canceled || !result.filePath) return { saved: false };
+
+      const filePath = path.extname(result.filePath).toLowerCase() === '.svg'
+        ? result.filePath
+        : result.filePath + '.svg';
+
+      await writeFile(filePath, svgContent, 'utf8');
+
+      let logId: number | undefined;
+      if (meta?.planName) {
+        logId = logExport({
+          planId: meta.planId ?? null,
+          planName: meta.planName,
+          exportType: meta.panel ? `svg-${meta.panel}` : 'svg',
+          panel: meta.panel ?? null,
+          systemName: meta.systemName ?? null,
+          filename: filePath,
+          opsecPreset: meta.opsecPreset ?? null
+        });
+      }
+      return { saved: true, path: filePath, logId };
+    }
+  );
+
   ipcMain.handle('exports.list', (_, planId: number | null): ExportLogEntry[] => {
     const rows = (planId == null
       ? getDb()

@@ -68,6 +68,8 @@ const api: EveSovApi = {
   exports: {
     capturePng: (filename, dataUrl, meta) =>
       ipcRenderer.invoke('exports.capturePng', filename, dataUrl, meta),
+    captureSvg: (filename, svgContent, meta) =>
+      ipcRenderer.invoke('exports.captureSvg', filename, svgContent, meta),
     list: (planId) => ipcRenderer.invoke('exports.list', planId ?? null),
     deleteLog: (id) => ipcRenderer.invoke('exports.deleteLog', id),
     getConfig: () => ipcRenderer.invoke('exports.getConfig'),
@@ -88,6 +90,9 @@ const api: EveSovApi = {
   },
   events: {
     on: (channel, listener) => {
+      // Many panels subscribe to broadcast channels simultaneously; raise the
+      // limit so Node doesn't emit spurious memory-leak warnings.
+      ipcRenderer.setMaxListeners(0);
       const wrapped = (_: unknown, payload: unknown) => listener(payload);
       ipcRenderer.on(channel, wrapped);
       return () => ipcRenderer.off(channel, wrapped);

@@ -25,6 +25,7 @@ export function buildExportFilename(args: {
   panel: ExportPanel;
   systemName?: string | null;
   date?: Date;
+  ext?: 'png' | 'svg';
 }): string {
   const parts = [
     sanitise(args.planName || 'Plan'),
@@ -32,5 +33,5 @@ export function buildExportFilename(args: {
     args.systemName ? sanitise(args.systemName) : '',
     timestamp(args.date)
   ].filter(Boolean);
-  return `${parts.join('_')}.png`;
+  return `${parts.join('_')}.${args.ext ?? 'png'}`;
 }
