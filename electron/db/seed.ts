@@ -11,7 +11,7 @@ import {
 } from "../csv/importer.js";
 import { importSde, importStargates } from "../sde/importer.js";
 import { regionNameToUrl } from "../sde/dotlanUrl.js";
-import { sanitizeDotlanSvg } from "../sde/svgSanitize.js";
+import { sanitizeDotlanSvg, loadLegendIcons } from "../sde/svgSanitize.js";
 import { openDatabase } from "./connection.js";
 
 const ROOT = process.cwd();
@@ -171,6 +171,8 @@ async function fetchDotlanSvgs(
     db: ReturnType<typeof openDatabase>,
     downloader: (url: string) => Promise<Buffer>,
 ): Promise<ImportReport> {
+    const icons = loadLegendIcons(ROOT);
+
     type RegionRow = { id: number; name: string };
     const regions = db
         .prepare(
@@ -191,7 +193,7 @@ async function fetchDotlanSvgs(
         const url = regionNameToUrl(region.name);
         try {
             const buf = await downloader(url);
-            const svg = sanitizeDotlanSvg(buf.toString('utf8'));
+            const svg = sanitizeDotlanSvg(buf.toString('utf8'), icons);
             update.run(svg, region.id);
             fetched++;
             console.log(`[seed] SVG fetched: ${region.name}`);
