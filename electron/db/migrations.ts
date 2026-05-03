@@ -44,18 +44,6 @@ export function runMigrations(db: DB, seedPath?: string): void {
     PRIMARY KEY (plan_id, system_id)
   )`);
 
-  // Populate system_adjacency from seed.db if this user DB has none (e.g. copied before
-  // stargates were seeded). Uses ATTACH so no JSONL re-import is needed at runtime.
-  const adjCount = (db.prepare('SELECT COUNT(*) AS n FROM system_adjacency').get() as { n: number }).n;
-  if (adjCount === 0 && seedPath && existsSync(seedPath)) {
-    db.exec(`ATTACH DATABASE '${seedPath.replace(/'/g, "''")}' AS seed`);
-    try {
-      db.prepare('INSERT OR IGNORE INTO system_adjacency SELECT system_id, neighbor_id FROM seed.system_adjacency').run();
-    } finally {
-      db.exec('DETACH DATABASE seed');
-    }
-  }
-
   const regionCols = (
     db.prepare('PRAGMA table_info(regions)').all() as { name: string }[]
   ).map((r) => r.name);
@@ -63,23 +51,37 @@ export function runMigrations(db: DB, seedPath?: string): void {
     db.exec('ALTER TABLE regions ADD COLUMN map_svg TEXT');
   }
 
-  // Backfill map_svg from seed.db if this user DB has regions with NULL map_svg.
-  const missingMapSvg = (db.prepare('SELECT COUNT(*) AS n FROM regions WHERE map_svg IS NULL').get() as { n: number }).n;
-  if (missingMapSvg > 0 && seedPath && existsSync(seedPath)) {
-    db.exec(`ATTACH DATABASE '${seedPath.replace(/'/g, "''")}' AS seed`);
+  // Unconditionally sync all seeded read-only tables from seed.db so that
+  // re-seeding (e.g. updated SVGs, new sov data) propagates to existing user DBs
+  // without requiring a manual app.db delete.
+  if (seedPath && existsSync(seedPath)) {
+    const escaped = seedPath.replace(/'/g, "''");
+    db.exec(`ATTACH DATABASE '${escaped}' AS seed`);
     try {
-      db.prepare('UPDATE regions SET map_svg = (SELECT map_svg FROM seed.regions sr WHERE sr.id = regions.id) WHERE map_svg IS NULL').run();
-    } finally {
-      db.exec('DETACH DATABASE seed');
-    }
-  }
+      db.transaction(() => {
+        db.exec(`
+          INSERT OR REPLACE INTO regions (id, name, faction_id, map_svg)
+            SELECT id, name, faction_id, map_svg FROM seed.regions;
 
-  // Backfill x/y/z coordinates from seed.db if this user DB has systems with NULL coords.
-  const missingCoords = (db.prepare('SELECT COUNT(*) AS n FROM systems WHERE x IS NULL').get() as { n: number }).n;
-  if (missingCoords > 0 && seedPath && existsSync(seedPath)) {
-    db.exec(`ATTACH DATABASE '${seedPath.replace(/'/g, "''")}' AS seed`);
-    try {
-      db.prepare('UPDATE systems SET x = (SELECT x FROM seed.systems s WHERE s.id = systems.id), y = (SELECT y FROM seed.systems s WHERE s.id = systems.id), z = (SELECT z FROM seed.systems s WHERE s.id = systems.id) WHERE x IS NULL').run();
+          INSERT OR REPLACE INTO constellations (id, region_id, name, faction_id)
+            SELECT id, region_id, name, faction_id FROM seed.constellations;
+
+          INSERT OR REPLACE INTO systems (id, constellation_id, region_id, name, security_status, security_class, x, y, z)
+            SELECT id, constellation_id, region_id, name, security_status, security_class, x, y, z FROM seed.systems;
+
+          INSERT OR REPLACE INTO stars (id, system_id, spectral_class, description, power)
+            SELECT id, system_id, spectral_class, description, power FROM seed.stars;
+
+          INSERT OR REPLACE INTO planets (id, system_id, name, power, workforce, superionic_ice_per_hour, magmatic_gas_per_hour)
+            SELECT id, system_id, name, power, workforce, superionic_ice_per_hour, magmatic_gas_per_hour FROM seed.planets;
+
+          INSERT OR REPLACE INTO upgrades (name, power, workforce, superionic_ice, magmatic_gas, startup)
+            SELECT name, power, workforce, superionic_ice, magmatic_gas, startup FROM seed.upgrades;
+
+          INSERT OR REPLACE INTO system_adjacency (system_id, neighbor_id)
+            SELECT system_id, neighbor_id FROM seed.system_adjacency;
+        `);
+      })();
     } finally {
       db.exec('DETACH DATABASE seed');
     }
