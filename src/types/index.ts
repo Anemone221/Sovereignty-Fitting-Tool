@@ -421,6 +421,8 @@ export interface EveSovApi {
         exportDna: (planId: number) => Promise<{ dna: string }>;
         exportDnaText: (planId: number) => Promise<{ dna: string }>;
         importDna: (dna: string) => Promise<{ planId: number; name: string }>;
+        exportMoonScans: (planId: number) => Promise<{ data: string }>;
+        importMoonScans: (data: string) => Promise<{ systemCount: number; moonsImported: number }>;
     };
     structures: {
         list: (planId: number, systemId?: number) => Promise<StructureNode[]>;

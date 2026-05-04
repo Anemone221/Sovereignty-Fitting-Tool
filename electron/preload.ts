@@ -76,7 +76,9 @@ const api: EveSovApi = {
     setConfig: (key, value) => ipcRenderer.invoke('exports.setConfig', key, value),
     exportDna: (planId) => ipcRenderer.invoke('exports.exportDna', planId),
     exportDnaText: (planId) => ipcRenderer.invoke('exports.exportDnaText', planId),
-    importDna: (dna) => ipcRenderer.invoke('exports.importDna', dna)
+    importDna: (dna) => ipcRenderer.invoke('exports.importDna', dna),
+    exportMoonScans: (planId) => ipcRenderer.invoke('exports.exportMoonScans', planId),
+    importMoonScans: (data) => ipcRenderer.invoke('exports.importMoonScans', data)
   },
   structures: {
     list: (planId, systemId?) => ipcRenderer.invoke('structures.list', planId, systemId),
