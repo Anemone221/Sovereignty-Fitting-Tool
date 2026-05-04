@@ -160,6 +160,11 @@ export function registerMoonScansIpc(): void {
       }
     })();
 
+    const { BrowserWindow } = require('electron') as typeof import('electron');
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('data-refreshed');
+    }
+
     return { sessionId, systemCount, moonsImported };
   });
 
