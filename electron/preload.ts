@@ -88,6 +88,13 @@ const api: EveSovApi = {
     regionSvg: (regionId) => ipcRenderer.invoke('map.regionSvg', regionId),
     overlayData: (planId, regionId) => ipcRenderer.invoke('map.overlayData', planId, regionId),
     auraData: (planId, regionId) => ipcRenderer.invoke('map.auraData', planId, regionId),
+    moonStats: (planId, regionId) => ipcRenderer.invoke('map.moonStats', planId, regionId),
+  },
+  moonScans: {
+    import: (clipboardText) => ipcRenderer.invoke('moonScans.import', clipboardText),
+    list: (systemId?) => ipcRenderer.invoke('moonScans.list', systemId),
+    sessions: () => ipcRenderer.invoke('moonScans.sessions'),
+    deleteSession: (sessionId) => ipcRenderer.invoke('moonScans.deleteSession', sessionId),
   },
   events: {
     on: (channel, listener) => {

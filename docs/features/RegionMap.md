@@ -33,7 +33,7 @@ Displays a dotlan-sourced SVG map of a selected region with upgrade/structure ic
 ## Prefs keys
 - `map.selectedRegionId` — last-selected region ID.
 - `map.showLegend` — `'true'` / `'false'`, default `'true'`. Hides the legend column and crops the viewBox to recover horizontal space.
-- `map.statMode` — one of `none | haven | forsaken-hub | ishtar | rally-point | true-sec`, default `'none'`. Renders a single numeric label below each system node (below upgrade icon row) derived from the system's combat upgrade grants or trueSec.
+- `map.statMode` — one of `none | haven | forsaken-hub | ishtar | rally-point | true-sec | moon-r4 | moon-r8 | moon-r16 | moon-r32 | moon-r64 | moon-best`, default `'none'`. Renders a single label below each system node derived from combat upgrade grants, trueSec, or moon scan counts.
 
 ## Open questions / next steps
 - Clicking a system on the map could select it in the Tree / SystemDetail panel.

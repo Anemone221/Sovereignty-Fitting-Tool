@@ -240,6 +240,31 @@ export interface StructureNode {
     structures: PlanStructure[];
 }
 
+export interface MoonScan {
+    id: number;
+    sessionId: number | null;
+    systemId: number;
+    systemName: string;
+    moonNumber: number;
+    oreType: string;
+    orePercent: number;
+    scanDate: string | null;
+}
+
+export interface MoonScanSession {
+    id: number;
+    importedAt: string;
+    systemCount: number;
+}
+
+export interface MoonCounts {
+    r4: number;
+    r8: number;
+    r16: number;
+    r32: number;
+    r64: number;
+}
+
 export interface MapSystemOverlay {
     systemId: number;
     trueSec: number | null;
@@ -254,6 +279,7 @@ export interface MapSystemOverlay {
     hasCynoJammer: boolean;
     hasRelicSites: boolean;
     relicUpgrades: string[];
+    moonCounts: MoonCounts | null;
 }
 
 export interface MapOverlayData {
@@ -414,6 +440,13 @@ export interface EveSovApi {
         regionSvg: (regionId: number) => Promise<string | null>;
         overlayData: (planId: number, regionId: number) => Promise<MapOverlayData>;
         auraData: (planId: number, regionId: number) => Promise<MapAuraData>;
+        moonStats: (planId: number, regionId: number) => Promise<Record<number, MoonCounts>>;
+    };
+    moonScans: {
+        import: (clipboardText: string) => Promise<{ sessionId: number; systemCount: number; moonsImported: number }>;
+        list: (systemId?: number) => Promise<MoonScan[]>;
+        sessions: () => Promise<MoonScanSession[]>;
+        deleteSession: (sessionId: number) => Promise<void>;
     };
     events: {
         on: (

@@ -1,7 +1,8 @@
 import { ipcMain } from 'electron';
 import { getDb } from '../db/userDb.js';
 import { reachableSystems } from './adjacency.js';
-import type { MapOverlayData, MapSystemOverlay, MapAuraData } from '@shared/index';
+import { oreRTier } from './moonScans.js';
+import type { MapOverlayData, MapSystemOverlay, MapAuraData, MoonCounts } from '@shared/index';
 
 const PROSPECTING_RE = /Prospecting Array ([123])$/;
 const THREAT_RE = /Threat Detection Array/;
@@ -103,6 +104,7 @@ export function registerMapIpc(): void {
             hasCynoJammer: false,
             hasRelicSites: false,
             relicUpgrades: [],
+            moonCounts: null,
           });
         }
         return overlayMap.get(systemId)!;
@@ -184,6 +186,60 @@ export function registerMapIpc(): void {
         alnPairs,
         upgradeIcons,
       };
+    },
+  );
+
+  ipcMain.handle(
+    'map.moonStats',
+    (_, planId: number, regionId: number): Record<number, MoonCounts> => {
+      const db = getDb();
+
+      // Systems in this region that belong to the active plan's scope
+      type ScopeRow = { system_id: number };
+      const planSystemIds = new Set(
+        (db.prepare(`
+          SELECT DISTINCT pu.system_id
+          FROM plan_upgrades pu
+          JOIN systems s ON s.id = pu.system_id
+          WHERE pu.plan_id = ? AND s.region_id = ?
+          UNION
+          SELECT DISTINCT ps.system_id
+          FROM plan_structures ps
+          JOIN systems s ON s.id = ps.system_id
+          WHERE ps.plan_id = ? AND s.region_id = ?
+          UNION
+          SELECT s.id AS system_id
+          FROM plan_scopes sc
+          JOIN systems s ON (
+            (sc.scope_type = 'system' AND sc.scope_id = s.id) OR
+            (sc.scope_type = 'constellation' AND sc.scope_id = s.constellation_id) OR
+            (sc.scope_type = 'region' AND sc.scope_id = s.region_id)
+          )
+          WHERE sc.plan_id = ? AND s.region_id = ?
+        `).all(planId, regionId, planId, regionId, planId, regionId) as ScopeRow[]).map((r) => r.system_id),
+      );
+
+      if (planSystemIds.size === 0) return {};
+
+      // Fetch all moon scan rows for these systems
+      type MoonRow = { system_id: number; ore_type: string };
+      const placeholders = [...planSystemIds].map(() => '?').join(',');
+      const moonRows = db.prepare(`
+        SELECT system_id, ore_type FROM moon_scans WHERE system_id IN (${placeholders})
+      `).all(...planSystemIds) as MoonRow[];
+
+      const result: Record<number, MoonCounts> = {};
+      for (const { system_id, ore_type } of moonRows) {
+        const tier = oreRTier(ore_type);
+        if (!tier) continue;
+        if (!result[system_id]) {
+          result[system_id] = { r4: 0, r8: 0, r16: 0, r32: 0, r64: 0 };
+        }
+        const key = `r${tier}` as keyof MoonCounts;
+        result[system_id][key]++;
+      }
+
+      return result;
     },
   );
 

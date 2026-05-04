@@ -6,7 +6,7 @@ import { useOpsec } from '@/state/opsecStore';
 import { useExportRegistry } from '@/state/exportRegistry';
 import { buildExportFilename } from '@/data/exportFilename';
 import { withOpsecCapture } from '@/data/opsecCapture';
-import type { MapOverlayData, MapAuraData, TreeNodeRegion, MapSystemOverlay } from '@shared/index';
+import type { MapOverlayData, MapAuraData, TreeNodeRegion, MapSystemOverlay, MoonCounts } from '@shared/index';
 import {
   STRUCTURE_ICONS,
   STABILITY_ICONS,
@@ -33,13 +33,50 @@ const NODE_H = 28;
 // the base node bounds) are never clipped by the viewport edge.
 const SVG_MARGIN = 24;
 
-type StatMode = 'none' | 'haven' | 'forsaken-hub' | 'ishtar' | 'rally-point' | 'true-sec';
+type StatMode =
+  | 'none'
+  | 'haven'
+  | 'forsaken-hub'
+  | 'ishtar'
+  | 'rally-point'
+  | 'true-sec'
+  | 'moon-r4'
+  | 'moon-r8'
+  | 'moon-r16'
+  | 'moon-r32'
+  | 'moon-r64'
+  | 'moon-best';
+
+const VALID_STAT_MODES: StatMode[] = [
+  'none', 'haven', 'forsaken-hub', 'ishtar', 'rally-point', 'true-sec',
+  'moon-r4', 'moon-r8', 'moon-r16', 'moon-r32', 'moon-r64', 'moon-best',
+];
 
 function extractStat(sys: MapSystemOverlay, mode: StatMode): string {
   if (mode === 'none') return '';
+
   if (mode === 'true-sec') {
     return sys.trueSec !== null ? sys.trueSec.toFixed(2) : '';
   }
+
+  if (mode === 'moon-r4' || mode === 'moon-r8' || mode === 'moon-r16' || mode === 'moon-r32' || mode === 'moon-r64') {
+    if (!sys.moonCounts) return '';
+    const key = mode.slice('moon-'.length) as keyof MoonCounts;
+    const n = sys.moonCounts[key];
+    return n > 0 ? String(n) : '';
+  }
+
+  if (mode === 'moon-best') {
+    if (!sys.moonCounts) return '';
+    const c = sys.moonCounts;
+    if (c.r64 > 0) return `R64×${c.r64}`;
+    if (c.r32 > 0) return `R32×${c.r32}`;
+    if (c.r16 > 0) return `R16×${c.r16}`;
+    if (c.r8 > 0) return `R8×${c.r8}`;
+    if (c.r4 > 0) return `R4×${c.r4}`;
+    return '';
+  }
+
   if (!sys.hasCombatSites) return '';
   const grants = aggregateGrants(sys.combatUpgrades.map((u) => siteEffectsFor(u, sys.trueSec)));
   if (mode === 'haven') {
@@ -77,6 +114,7 @@ export function RegionMap() {
   const [exporting, setExporting] = useState(false);
   const [showLegend, setShowLegend] = useState(true);
   const [statMode, setStatMode] = useState<StatMode>('none');
+  const [moonStats, setMoonStats] = useState<Record<number, MoonCounts>>({});
 
   // System SVG positions parsed from the dotlan <use> elements.
   const [positions, setPositions] = useState<Map<number, { x: number; y: number }>>(new Map());
@@ -159,8 +197,7 @@ export function RegionMap() {
     }).catch(console.error);
 
     evesov.prefs.get(STAT_PREFS_KEY).then((v) => {
-      const valid: StatMode[] = ['none', 'haven', 'forsaken-hub', 'ishtar', 'rally-point', 'true-sec'];
-      if (v && valid.includes(v as StatMode)) setStatMode(v as StatMode);
+      if (v && VALID_STAT_MODES.includes(v as StatMode)) setStatMode(v as StatMode);
     }).catch(console.error);
   }, []);
 
@@ -253,6 +290,15 @@ export function RegionMap() {
   useEffect(() => {
     const container = svgContainerRef.current;
     if (!container || !overlay || !auraData || positions.size === 0) return;
+
+    // Merge moon counts into overlay systems without mutating the original state.
+    const overlayWithMoons = {
+      ...overlay,
+      systems: overlay.systems.map((s) => ({
+        ...s,
+        moonCounts: moonStats[s.systemId] ?? null,
+      })),
+    };
 
     const svgEl = container.querySelector('svg');
     if (!svgEl) return;
@@ -364,7 +410,7 @@ export function RegionMap() {
       names.map((n) => overlay.upgradeIcons[n]).find(Boolean) ?? fallback;
 
     // 3. Per-system icons (above system nodes) and stat labels (below).
-    for (const sys of overlay.systems) {
+    for (const sys of overlayWithMoons.systems) {
       const p = pos.get(sys.systemId);
       if (!p) continue;
       const cx = p.x + NODE_CX;
@@ -440,6 +486,30 @@ export function RegionMap() {
       }
     }
 
+    // Moon stat labels for systems that have scan data but no overlay entry.
+    // The overlay loop above only covers systems with plan upgrades/structures.
+    if (statMode.startsWith('moon-')) {
+      const overlaySystemIds = new Set(overlay.systems.map((s) => s.systemId));
+      for (const [idStr, counts] of Object.entries(moonStats)) {
+        const systemId = Number(idStr);
+        if (overlaySystemIds.has(systemId)) continue; // already handled above
+        const p = pos.get(systemId);
+        if (!p) continue;
+        const label = extractStat({ moonCounts: counts } as MapSystemOverlay, statMode);
+        if (!label) continue;
+        const txt = document.createElementNS(NS, 'text');
+        txt.setAttribute('x', String(p.x + NODE_CX));
+        txt.setAttribute('y', String(p.y + 22));
+        txt.setAttribute('text-anchor', 'middle');
+        txt.setAttribute('font-size', '8');
+        txt.setAttribute('font-weight', 'bold');
+        txt.setAttribute('fill', '#d8dee9');
+        txt.setAttribute('pointer-events', 'none');
+        txt.textContent = label;
+        g.appendChild(txt);
+      }
+    }
+
     svgEl.appendChild(g);
 
     return () => {
@@ -447,17 +517,19 @@ export function RegionMap() {
       svgEl.querySelector('#evesov-lines')?.remove();
       svgEl.querySelector('#evesov-overlay')?.remove();
     };
-  }, [overlay, auraData, positions, statMode]);
+  }, [overlay, auraData, positions, statMode, moonStats]);
 
   // Fetch overlay + aura data when plan or region changes
   const fetchOverlayData = useCallback(() => {
     if (activePlanId === null || selectedRegionId === null) {
       setOverlay(null);
       setAuraData(null);
+      setMoonStats({});
       return;
     }
     evesov.map.overlayData(activePlanId, selectedRegionId).then(setOverlay).catch(console.error);
     evesov.map.auraData(activePlanId, selectedRegionId).then(setAuraData).catch(console.error);
+    evesov.map.moonStats(activePlanId, selectedRegionId).then(setMoonStats).catch(console.error);
   }, [activePlanId, selectedRegionId]);
 
   useEffect(() => {
@@ -467,6 +539,11 @@ export function RegionMap() {
   // Re-fetch overlay on plan mutations
   useEffect(() => {
     return evesov.events.on('plan-changed', fetchOverlayData);
+  }, [fetchOverlayData]);
+
+  // Re-fetch moon stats when scan data changes (import / delete session)
+  useEffect(() => {
+    return evesov.events.on('data-refreshed', fetchOverlayData);
   }, [fetchOverlayData]);
 
   const handleRegionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -621,6 +698,12 @@ export function RegionMap() {
           <option value="ishtar">Ishtar Capable</option>
           <option value="rally-point">Rally Point Count</option>
           <option value="true-sec">True Sec</option>
+          <option value="moon-r4">Moon: R4 Count</option>
+          <option value="moon-r8">Moon: R8 Count</option>
+          <option value="moon-r16">Moon: R16 Count</option>
+          <option value="moon-r32">Moon: R32 Count</option>
+          <option value="moon-r64">Moon: R64 Count</option>
+          <option value="moon-best">Moon: Best Tier</option>
         </select>
         <OpsecPill />
         <button
