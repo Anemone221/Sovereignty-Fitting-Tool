@@ -1260,6 +1260,7 @@ body[data-opsec-supercaps="1"] [data-supercap="1"] { color: transparent !importa
 .moon-scans__import-result { font-size: 12px; color: var(--ok); }
 .moon-scans__sessions { padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .moon-scans__section-label { font-size: 11px; font-weight: 600; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.moon-scans__section-label--toggle { display: flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; padding: 0; width: 100%; text-align: left; }
 .moon-scans__session-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px; }
 .moon-scans__session-date { color: var(--fg-dim); flex: 1; }
 .moon-scans__session-count { color: var(--fg-mute); }

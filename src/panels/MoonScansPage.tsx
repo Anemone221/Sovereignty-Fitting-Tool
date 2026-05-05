@@ -74,6 +74,7 @@ export function MoonScansPage() {
   const [importResult, setImportResult] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const [sessionsCollapsed, setSessionsCollapsed] = useState(true);
   const [filterTier, setFilterTier] = useState<number | null>(null);
   const [searchText, setSearchText] = useState('');
 
@@ -81,6 +82,7 @@ export function MoonScansPage() {
     const [s, sc] = await Promise.all([evesov.moonScans.sessions(), evesov.moonScans.list()]);
     setSessions(s);
     setScans(sc);
+    setCollapsed(new Set(sc.map((scan) => scan.systemId)));
   }, []);
 
   useEffect(() => {
@@ -156,8 +158,15 @@ export function MoonScansPage() {
 
       {sessions.length > 0 && (
         <div className="moon-scans__sessions">
-          <div className="moon-scans__section-label">Import sessions</div>
-          {sessions.map((session) => (
+          <button
+            type="button"
+            className="moon-scans__section-label moon-scans__section-label--toggle"
+            onClick={() => setSessionsCollapsed((v) => !v)}
+          >
+            <span className="moon-scans__system-toggle">{sessionsCollapsed ? '▶' : '▼'}</span>
+            Import sessions ({sessions.length})
+          </button>
+          {!sessionsCollapsed && sessions.map((session) => (
             <div key={session.id} className="moon-scans__session-row">
               <span className="moon-scans__session-date">
                 {new Date(session.importedAt).toLocaleString()}
