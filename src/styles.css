@@ -420,7 +420,7 @@ table.grid td.cost-produces { color: var(--ok); }
 .plans__dup-form button[type="button"] { color: var(--fg-dim); padding: 2px 6px; font-size: 11px; }
 .plans__delete { color: var(--fg-mute); padding: 0 6px; font-size: 16px; line-height: 1; }
 .plans__delete:hover { color: var(--danger); }
-.plans__lock { font-size: 11px; margin-left: 4px; opacity: 0.7; cursor: default; }
+.plans__lock { font-size: 11px; margin-left: 4px; opacity: 0.7; }
 .plans__empty { padding: 12px; color: var(--fg-mute); list-style: none; }
 
 .plans__picker { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--bg-elev-2); border-bottom: 1px solid var(--border); list-style: none; }
