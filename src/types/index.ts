@@ -414,6 +414,7 @@ export interface EveSovApi {
             params?: Record<string, unknown>,
         ) => Promise<number>;
         dockBack: (windowId: number) => Promise<void>;
+        selectAndFocusSystem: (systemId: number) => Promise<void>;
     };
     exports: {
         capturePng: (
@@ -464,7 +465,7 @@ export interface EveSovApi {
     };
     events: {
         on: (
-            channel: "plan-changed" | "data-refreshed",
+            channel: "plan-changed" | "data-refreshed" | "plan-active-changed" | "selected-system-changed" | "focus-panel-requested",
             listener: (payload: unknown) => void,
         ) => () => void;
     };

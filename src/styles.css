@@ -140,8 +140,71 @@ input[type="search"]:focus { border-color: var(--accent); }
   color: var(--accent);
   border-left-color: var(--accent);
 }
+.activity-bar__entry {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.activity-bar__entry:hover .activity-bar__popout { opacity: 1; }
 .activity-bar__glyph { font-size: 18px; line-height: 1; }
 .activity-bar__label { font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; }
+.activity-bar__popout {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  opacity: 0;
+  font-size: 9px;
+  line-height: 1;
+  padding: 1px 2px;
+  color: var(--fg-mute);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: opacity 80ms, color 80ms;
+}
+.activity-bar__popout:hover { color: var(--fg); }
+
+/* Pop-out panel window */
+.panel-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+}
+.panel-window__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.panel-window__title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+}
+.panel-window__dock-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  color: var(--fg-mute);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 80ms, border-color 80ms;
+}
+.panel-window__dock-btn:hover { color: var(--fg); border-color: var(--fg-mute); }
+.panel-window__dock-btn:disabled { opacity: 0.5; cursor: default; }
+.panel-window__content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
 
 /* Panels render inside Dockview groups. Make them fill the panel area. */
 .tree, .detail, .catalog {

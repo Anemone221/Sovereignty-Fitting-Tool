@@ -68,7 +68,8 @@ const api: EveSovApi = {
   },
   windows: {
     openPanel: (panelId, params) => ipcRenderer.invoke('windows.openPanel', panelId, params),
-    dockBack: (windowId) => ipcRenderer.invoke('windows.dockBack', windowId)
+    dockBack: (windowId) => ipcRenderer.invoke('windows.dockBack', windowId),
+    selectAndFocusSystem: (systemId) => ipcRenderer.invoke('windows.selectAndFocusSystem', systemId),
   },
   exports: {
     capturePng: (filename, dataUrl, meta) =>
