@@ -67,6 +67,8 @@ jobs:
 
     build-linux:
         runs-on: ubuntu-latest
+        env:
+            ELECTRON_DISABLE_SANDBOX: 1
         steps:
             - name: Checkout
               uses: actions/checkout@v4
