@@ -41,6 +41,7 @@ export function PlansPanel() {
   const [compareResult, setCompareResult] = useState<CompareResult | null>(null);
   const [compareLoading, setCompareLoading] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
   const activePlanId = useUi((s) => s.activePlanId);
   const setActivePlan = useUi((s) => s.setActivePlan);
   const setActivePlanReadOnly = useUi((s) => s.setActivePlanReadOnly);
@@ -103,10 +104,19 @@ export function PlansPanel() {
   const remove = async (id: number) => {
     await evesov.plans.delete(id);
     if (activePlanId === id) setActivePlan(null);
+    setConfirmingDeleteId(null);
     await refresh();
   };
 
+  const startRename = (p: PlanSummary) => {
+    setConfirmingDeleteId(null);
+    setDuplicatingId(null);
+    setRenameValue(p.name);
+    setRenamingId(p.id);
+  };
+
   const startDuplicate = (p: PlanSummary) => {
+    setConfirmingDeleteId(null);
     setDuplicatingId(p.id);
     setDuplicateValue(uniqueCopyName(p.name, plans.map((x) => x.name)));
   };
@@ -177,6 +187,15 @@ export function PlansPanel() {
       setTimeout(() => setCopyFeedback(false), 1500);
     });
   }, [compareResult]);
+  const startDelete = (id: number) => {
+    setRenamingId(null);
+    setDuplicatingId(null);
+    setConfirmingDeleteId(id);
+  };
+
+  const cancelDelete = () => {
+    setConfirmingDeleteId(null);
+  };
 
   return (
     <div className="plans">
@@ -222,9 +241,16 @@ export function PlansPanel() {
             >
               ✕
             </button>
+        {plans.length > 0 && (
+          <li className="plans__header" aria-hidden="true">
+            <span className="plans__header-name">Name</span>
+            <span className="plans__header-date">Created</span>
+            <span className="plans__header-date">Modified</span>
+            <span className="plans__header-actions" />
           </li>
         )}
         {plans.flatMap((p) => {
+          const isConfirmingDelete = confirmingDeleteId === p.id;
           const items = [
             <li
               key={p.id}
@@ -264,6 +290,7 @@ export function PlansPanel() {
                     setRenameValue(p.name);
                     setRenamingId(p.id);
                   }}
+                  onDoubleClick={() => startRename(p)}
                   title="Click to activate, double-click to rename"
                 >
                   {p.name}
@@ -273,6 +300,17 @@ export function PlansPanel() {
                 <span className="plans__lock" title="Read-only — right-click to unlock">🔒</span>
               )}
               <span className="plans__meta">{formatDate(p.updatedAt)}</span>
+              <span className="plans__meta plans__meta--created" title="Created">{formatDate(p.createdAt)}</span>
+              <span className="plans__meta plans__meta--updated" title="Modified">{formatDate(p.updatedAt)}</span>
+              <button
+                type="button"
+                className="plans__rename-btn"
+                title="Rename plan"
+                aria-label={`Rename ${p.name}`}
+                onClick={() => startRename(p)}
+              >
+                ✎
+              </button>
               <button
                 type="button"
                 className="plans__dup"
@@ -282,16 +320,35 @@ export function PlansPanel() {
               >
                 ⎘
               </button>
-              <button
-                type="button"
-                className="plans__delete"
-                title="Delete plan"
-                onClick={() => {
-                  if (confirm(`Delete plan "${p.name}"?`)) void remove(p.id);
-                }}
-              >
-                ×
-              </button>
+              {isConfirmingDelete ? (
+                <span className="plans__delete-confirm">
+                  <button
+                    type="button"
+                    className="plans__delete plans__delete--confirm"
+                    title="Confirm delete"
+                    onClick={() => void remove(p.id)}
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    className="plans__delete-cancel"
+                    title="Cancel"
+                    onClick={cancelDelete}
+                  >
+                    Cancel
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="plans__delete"
+                  title="Delete plan"
+                  onClick={() => startDelete(p.id)}
+                >
+                  ×
+                </button>
+              )}
             </li>
           ];
           if (duplicatingId === p.id) {

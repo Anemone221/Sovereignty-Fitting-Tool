@@ -17,6 +17,7 @@ import { StructuresPage } from '@/panels/StructuresPage';
 import { RegionMap } from '@/panels/RegionMap';
 import { ExportsPage } from '@/panels/ExportsPage';
 import { MoonScansPage } from '@/panels/MoonScansPage';
+import { SettingsPage } from '@/panels/SettingsPage';
 import { ActivityBar } from './ActivityBar';
 import { evesov } from '@/api/evesov';
 import { useUi } from '@/state/uiStore';
@@ -36,7 +37,8 @@ const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> =
   structuresPage: () => <StructuresPage />,
   regionMap: () => <RegionMap />,
   exportsPage: () => <ExportsPage />,
-  moonScansPage: () => <MoonScansPage />
+  moonScansPage: () => <MoonScansPage />,
+  settingsPage: () => <SettingsPage />
 };
 
 interface PanelDefinition {
@@ -57,7 +59,8 @@ const PANELS: Record<string, PanelDefinition> = {
   structures: { id: 'structures', componentId: 'structuresPage', title: 'Structures' },
   regionMap: { id: 'regionMap', componentId: 'regionMap', title: 'Region Map' },
   moonScans: { id: 'moonScans', componentId: 'moonScansPage', title: 'Moon Scans' },
-  exports: { id: 'exports', componentId: 'exportsPage', title: 'Exports' }
+  exports: { id: 'exports', componentId: 'exportsPage', title: 'Exports' },
+  settings: { id: 'settings', componentId: 'settingsPage', title: 'Settings' }
 };
 
 export function DockShell() {
@@ -66,6 +69,7 @@ export function DockShell() {
   const persistTimer = useRef<number | null>(null);
   const hydrateActivePlan = useUi((s) => s.hydrateActivePlan);
   const registerFocusPanel = useUi((s) => s.registerFocusPanel);
+  const activePlanId = useUi((s) => s.activePlanId);
 
   const hydrateOpsec = useOpsec((s) => s.hydrate);
 
@@ -73,6 +77,30 @@ export function DockShell() {
     void hydrateActivePlan();
     void hydrateOpsec();
   }, [hydrateActivePlan, hydrateOpsec]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const sync = async () => {
+      if (activePlanId == null) {
+        document.title = 'Sov Fitting Tool (SFT)';
+        return;
+      }
+      const list = await evesov.plans.list();
+      if (cancelled) return;
+      const plan = list.find((p) => p.id === activePlanId);
+      document.title = plan
+        ? `${plan.name} — Sov Fitting Tool (SFT)`
+        : 'Sov Fitting Tool (SFT)';
+    };
+    void sync();
+    const off = evesov.events.on('plan-changed', () => {
+      void sync();
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [activePlanId]);
 
   const addOrFocus = useCallback((panelId: string) => {
     const api = apiRef.current;
