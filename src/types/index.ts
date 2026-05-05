@@ -403,6 +403,10 @@ export interface EveSovApi {
         searchSystems: (
             query: string,
         ) => Promise<{ systemId: number; systemName: string }[]>;
+        importCsv: (
+            planName: string,
+            csvText: string,
+        ) => Promise<{ planId: number; systemsImported: number; warnings: string[] }>;
     };
     windows: {
         openPanel: (

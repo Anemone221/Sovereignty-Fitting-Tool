@@ -62,7 +62,9 @@ const api: EveSovApi = {
     removeAlnLink: (planId, systemId) =>
       ipcRenderer.invoke('plans.removeAlnLink', planId, systemId),
     searchSystems: (query) =>
-      ipcRenderer.invoke('plans.searchSystems', query)
+      ipcRenderer.invoke('plans.searchSystems', query),
+    importCsv: (planName, csvText) =>
+      ipcRenderer.invoke('plans.importCsv', planName, csvText),
   },
   windows: {
     openPanel: (panelId, params) => ipcRenderer.invoke('windows.openPanel', panelId, params),
