@@ -67,6 +67,8 @@ jobs:
 
     build-linux:
         runs-on: ubuntu-latest
+        env:
+            ELECTRON_DISABLE_SANDBOX: 1
         steps:
             - name: Checkout
               uses: actions/checkout@v4
@@ -81,7 +83,7 @@ jobs:
               run: npm i
 
             - name: Generate Seed Database
-              run: npm run seed
+              run: xvfb-run --auto-servernum npm run seed
 
             - name: Build and package
               run: npm run package:linux:unsigned

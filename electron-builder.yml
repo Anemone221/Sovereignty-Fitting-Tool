@@ -61,5 +61,6 @@ linux:
           arch: [x64]
     icon: app.png
     category: Utility
+    maintainer: Sov Fitting Tool (SFT) Contributors <unkwntech@gmail.com>
 
 publish: null
