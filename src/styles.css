@@ -1742,3 +1742,19 @@ body[data-opsec-supercaps="1"] [data-supercap="1"] { color: transparent !importa
   white-space: nowrap;
 }
 .audit__copy-btn:hover { color: var(--fg); border-color: var(--fg-dim); }
+
+.settings__panel-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 4px 16px;
+}
+.settings__panel-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg);
+  padding: 4px 0;
+  cursor: pointer;
+}
+.settings__panel-list-item input { accent-color: var(--accent); }
