@@ -1191,7 +1191,8 @@ thead .matrix__sticky-col { z-index: 3; background: var(--bg-elev); }
 .region-map__export-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .region-map__empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--fg-dim); font-size: 13px; }
 .region-map__container { position: relative; flex: 1; overflow: hidden; }
-.region-map__svg { display: block; width: 100%; height: 100%; }
+.region-map__svg { display: block; width: 100%; height: 100%; cursor: grab; }
+.region-map__svg:active { cursor: grabbing; }
 .region-map__svg svg { display: block; width: 100%; height: auto; }
 .region-map__legend-btn { background: var(--bg-elev); color: var(--fg-dim); border: 1px solid var(--border); border-radius: 4px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
 .region-map__legend-btn:hover { color: var(--fg); border-color: var(--accent); }
