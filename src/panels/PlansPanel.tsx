@@ -241,6 +241,8 @@ export function PlansPanel() {
             >
               ✕
             </button>
+          </li>
+        )}
         {plans.length > 0 && (
           <li className="plans__header" aria-hidden="true">
             <span className="plans__header-name">Name</span>
@@ -285,21 +287,13 @@ export function PlansPanel() {
                   type="button"
                   className="plans__name"
                   onClick={() => setActivePlan(p.id)}
-                  onDoubleClick={() => {
-                    if (p.readOnly) return;
-                    setRenameValue(p.name);
-                    setRenamingId(p.id);
-                  }}
                   onDoubleClick={() => startRename(p)}
                   title="Click to activate, double-click to rename"
                 >
                   {p.name}
+                  {p.readOnly && <span className="plans__lock" title="Read-only — right-click to unlock">🔒</span>}
                 </button>
               )}
-              {p.readOnly && (
-                <span className="plans__lock" title="Read-only — right-click to unlock">🔒</span>
-              )}
-              <span className="plans__meta">{formatDate(p.updatedAt)}</span>
               <span className="plans__meta plans__meta--created" title="Created">{formatDate(p.createdAt)}</span>
               <span className="plans__meta plans__meta--updated" title="Modified">{formatDate(p.updatedAt)}</span>
               <button
