@@ -83,7 +83,7 @@ jobs:
               run: npm i
 
             - name: Generate Seed Database
-              run: npm run seed
+              run: xvfb-run --auto-servernum npm run seed
 
             - name: Build and package
               run: npm run package:linux:unsigned
