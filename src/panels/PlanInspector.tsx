@@ -8,7 +8,7 @@ import { withOpsecCapture } from '@/data/opsecCapture';
 import { badgesForUpgrades } from '@/data/systemEffects';
 import { classifyCapacity } from '@/data/upgradeFamilies';
 import { useExportRegistry } from '@/state/exportRegistry';
-import { useOpsec } from '@/state/opsecStore';
+import { useEffectiveOpsec, useOpsec } from '@/state/opsecStore';
 import { useUi } from '@/state/uiStore';
 import type {
   ClearUpgradesScope,
@@ -51,6 +51,36 @@ export function PlanInspector() {
   const [upgrades, setUpgrades] = useState<Upgrade[]>([]);
   const [capitalSystemId, setCapitalSystemId] = useState<number | null>(null);
   const inspectorRef = useRef<HTMLDivElement>(null);
+  const opsec = useEffectiveOpsec();
+  const systemNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    if (rollup) rollup.systemBalances.forEach((r, i) => map.set(r.systemId, `System-${i + 1}`));
+    return map;
+  }, [rollup]);
+  const constellationNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    if (rollup) {
+      const seen = new Set<number>();
+      let n = 1;
+      for (const r of rollup.systemBalances) {
+        if (!seen.has(r.constellationId)) {
+          seen.add(r.constellationId);
+          map.set(r.constellationId, `Constellation-${n++}`);
+        }
+      }
+    }
+    return map;
+  }, [rollup]);
+  const renderSystemName = useCallback(
+    (id: number, real: string) =>
+      opsec.hideSystemNames ? (systemNameById.get(id) ?? real) : real,
+    [opsec.hideSystemNames, systemNameById]
+  );
+  const renderConstellationName = useCallback(
+    (id: number, real: string) =>
+      opsec.hideSystemNames ? (constellationNameById.get(id) ?? real) : real,
+    [opsec.hideSystemNames, constellationNameById]
+  );
 
   useEffect(() => {
     if (!menu) return;
@@ -293,8 +323,10 @@ export function PlanInspector() {
                   >
                     <span className="tree__chevron">{isCollapsed ? '▸' : '▾'}</span>
                     <span className="inspector-tree__title">
-                      {g.constellationName}
-                      <span className="inspector-tree__region"> ({g.regionName})</span>
+                      {renderConstellationName(g.constellationId, g.constellationName)}
+                      {!opsec.hideSystemNames && (
+                        <span className="inspector-tree__region"> ({g.regionName})</span>
+                      )}
                     </span>
                     <span className="inspector-tree__counts">
                       {g.systems.length} systems
@@ -377,7 +409,7 @@ export function PlanInspector() {
                                     focusPanel('system');
                                   }}
                                 >
-                                  {s.systemName}
+                                  {renderSystemName(s.systemId, s.systemName)}
                                 </button>
                                 {capitalSystemId === s.systemId && (
                                   <span
@@ -416,17 +448,20 @@ export function PlanInspector() {
                                     className="effect-badge__icon"
                                   />
                                 ))}
-                                {s.alnLink && (
-                                  <span
-                                    className="inspector__aln"
-                                    title={`Ansiblex link → ${s.alnLink.linkedSystemName}`}
-                                  >
-                                    →{' '}
-                                    <span className="inspector__aln-pill">
-                                      {s.alnLink.linkedSystemName}
+                                {s.alnLink && (() => {
+                                  const linkedName = s.alnLink.linkedSystemId !== null
+                                    ? renderSystemName(s.alnLink.linkedSystemId, s.alnLink.linkedSystemName)
+                                    : (opsec.hideSystemNames ? 'System-?' : s.alnLink.linkedSystemName);
+                                  return (
+                                    <span
+                                      className="inspector__aln"
+                                      title={`Ansiblex link → ${linkedName}`}
+                                    >
+                                      →{' '}
+                                      <span className="inspector__aln-pill">{linkedName}</span>
                                     </span>
-                                  </span>
-                                )}
+                                  );
+                                })()}
                               </td>
                               <td>
                                 {flavor && (

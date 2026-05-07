@@ -1261,6 +1261,7 @@ export function SystemDetail() {
 
             {moonScans.length > 0 && (
                 <section
+                    data-opsec-moon="1"
                     className={`detail__section${moonsOpen ? "" : " detail__section--collapsed"}`}
                 >
                     <button

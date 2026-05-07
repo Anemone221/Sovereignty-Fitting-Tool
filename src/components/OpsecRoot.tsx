@@ -12,7 +12,9 @@ const FLAG_TO_ATTR: Record<string, string> = {
   hideSystemEffects: 'data-opsec-system-effects',
   hideTransferRoute: 'data-opsec-transfer-route',
   hideGasIceBalance: 'data-opsec-gas-ice',
-  hideSystemNames: 'data-opsec-system-names'
+  hideSystemNames: 'data-opsec-system-names',
+  hideMoonScans: 'data-opsec-moons',
+  hideMapIcons: 'data-opsec-map-icons'
 };
 
 export function OpsecRoot({ children }: { children: React.ReactNode }): JSX.Element {

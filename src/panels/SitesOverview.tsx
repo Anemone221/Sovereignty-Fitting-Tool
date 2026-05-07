@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { evesov } from '@/api/evesov';
 import { useUi } from '@/state/uiStore';
 import { OpsecPill } from '@/components/OpsecPill';
-import { useOpsec } from '@/state/opsecStore';
+import { useEffectiveOpsec, useOpsec } from '@/state/opsecStore';
 import { useExportRegistry } from '@/state/exportRegistry';
 import { buildExportFilename } from '@/data/exportFilename';
 import { withOpsecCapture } from '@/data/opsecCapture';
@@ -25,6 +25,17 @@ export function SitesOverview() {
   const selectSystem = useUi((s) => s.selectSystem);
   const [matrix, setMatrix] = useState<PlanMatrix | null>(null);
   const matrixRef = useRef<HTMLDivElement>(null);
+  const opsec = useEffectiveOpsec();
+  const systemNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    if (matrix) matrix.systems.forEach((s, i) => map.set(s.id, `System-${i + 1}`));
+    return map;
+  }, [matrix]);
+  const renderSystemName = useCallback(
+    (id: number, real: string) =>
+      opsec.hideSystemNames ? (systemNameById.get(id) ?? real) : real,
+    [opsec.hideSystemNames, systemNameById]
+  );
 
   const onExportPng = useCallback(async () => {
     const el = matrixRef.current;
@@ -179,7 +190,7 @@ export function SitesOverview() {
                   <tr key={r.id}>
                     <td className="matrix__sticky-col matrix__system-cell">
                       <button className="inspector__system" onClick={() => selectSystem(r.id)} type="button">
-                        {r.name}
+                        {renderSystemName(r.id, r.name)}
                       </button>
                       {badgesForUpgrades(r.upgradeNames).map((b) => (
                         <img

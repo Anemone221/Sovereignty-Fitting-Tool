@@ -1345,6 +1345,13 @@ body[data-opsec-gas-ice="1"] [data-budget-row="gas"] .budget-row__delta { visibi
 body[data-opsec-system-effects="1"] .system-detail__effects,
 body[data-opsec-system-effects="1"] [data-system-effect-marker] { visibility: hidden; }
 body[data-opsec-supercaps="1"] [data-supercap="1"] { color: transparent !important; background: var(--bg-elev-2) !important; }
+body[data-opsec-supercaps="1"] .evesov-icon--supercap { display: none !important; }
+body[data-opsec-system-effects="1"] .overview .effect-badge__icon,
+body[data-opsec-system-effects="1"] .inspector .effect-badge__icon { display: none !important; }
+body[data-opsec-system-names="1"] .overview .matrix__system-meta { visibility: hidden; }
+body[data-opsec-moons="1"] [data-opsec-moon="1"] { display: none !important; }
+body[data-opsec-moons="1"] .evesov-moon-label { display: none !important; }
+body[data-opsec-map-icons="1"] #evesov-overlay image { display: none !important; }
 .exports__dna-actions { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .exports__dna-message { padding: 6px 8px; border-radius: 4px; font-size: 12px; margin-bottom: 8px; }
 .exports__dna-message--ok { background: rgba(63, 185, 80, 0.1); color: var(--ok); border: 1px solid var(--ok); }

@@ -22,6 +22,46 @@ import { siteEffectsFor, aggregateGrants, formatGrants } from '@/data/effects';
 import { producibleFromPlanets, highestProducibleTier } from '@/data/piRecipes';
 import type { PlanetType } from '@/data/piRecipes';
 
+// Applies op-sec redactions imperatively on a cloned SVG before export. Operates on the
+// clone — the live SVG in the DOM is never mutated. RegionMap exports both PNG (rasterised
+// from a cloned SVG via <img>) and standalone SVG; in both paths body[data-opsec-*] CSS
+// rules don't propagate, so redaction happens here directly.
+function applyRegionMapOpsec(clone: SVGSVGElement): void {
+  const flags = useOpsec.getState().flags;
+  if (flags.hideMapIcons) {
+    clone.querySelectorAll('#evesov-overlay image').forEach((el) => el.remove());
+  } else {
+    if (flags.hideSupercaps) {
+      clone.querySelectorAll('.evesov-icon--supercap').forEach((el) => el.remove());
+    }
+  }
+  if (flags.hideMoonScans) {
+    clone.querySelectorAll('.evesov-moon-label').forEach((el) => el.remove());
+  }
+  if (flags.hideSystemNames) {
+    let counter = 0;
+    const skipAncestor = (el: Element): boolean => {
+      let p: Element | null = el;
+      while (p) {
+        const id = p.id;
+        if (id === 'legend' || id === 'evesov-overlay' || id === 'evesov-aura' || id === 'evesov-lines') {
+          return true;
+        }
+        p = p.parentElement;
+      }
+      return false;
+    };
+    clone.querySelectorAll<SVGTextElement>('text').forEach((t) => {
+      if (skipAncestor(t)) return;
+      const cls = t.getAttribute('class') ?? '';
+      // dotlan legend captions ('l') and copyright ('lc') stay readable.
+      if (cls.split(/\s+/).some((c) => c === 'l' || c === 'lc')) return;
+      counter += 1;
+      t.textContent = `Sys-${counter}`;
+    });
+  }
+}
+
 const MAP_PREFS_KEY = 'map.selectedRegionId';
 const LEGEND_PREFS_KEY = 'map.showLegend';
 const STAT_PREFS_KEY = 'map.statMode';
@@ -487,7 +527,13 @@ export function RegionMap() {
 
     // Helper: create a row of <image> elements centred on cx, with top of row at rowY.
     // tooltips[i], if provided, is attached as a <title> child for native SVG hover text.
-    const addIconRow = (icons: string[], cx: number, rowY: number, tooltips?: string[]) => {
+    const addIconRow = (
+      icons: string[],
+      cx: number,
+      rowY: number,
+      tooltips?: string[],
+      classes?: (string | undefined)[]
+    ) => {
       const rowW = icons.length * ICON_SIZE + (icons.length - 1) * ICON_GAP;
       const startX = cx - rowW / 2;
       icons.forEach((src, i) => {
@@ -498,6 +544,8 @@ export function RegionMap() {
         img.setAttribute('height', String(ICON_SIZE));
         img.setAttributeNS(XLINK, 'xlink:href', src);
         img.setAttribute('href', src);
+        const cls = classes?.[i];
+        if (cls) img.setAttribute('class', cls);
         const tip = tooltips?.[i];
         if (tip) {
           const title = document.createElementNS(NS, 'title');
@@ -555,6 +603,7 @@ export function RegionMap() {
 
       const upgradeIcons: string[] = [];
       const upgradeTips: string[] = [];
+      const upgradeClasses: (string | undefined)[] = [];
 
       if (sys.miningTier !== null) {
         upgradeIcons.push(dbIconAny(sys.miningUpgrades, MINING_ICONS[sys.miningTier]));
@@ -563,6 +612,7 @@ export function RegionMap() {
         );
         const names = sys.miningUpgrades.join(', ');
         upgradeTips.push(grants ? `${names}\nSpawns: ${grants}` : names);
+        upgradeClasses.push(undefined);
       }
       if (sys.hasCombatSites) {
         upgradeIcons.push(dbIconAny(sys.combatUpgrades, combatSite));
@@ -571,30 +621,37 @@ export function RegionMap() {
         );
         const names = sys.combatUpgrades.join(', ');
         upgradeTips.push(grants ? `${names}\nSpawns: ${grants}` : names);
+        upgradeClasses.push(undefined);
       }
       if (sys.hasAnsiblex) {
         upgradeIcons.push(dbIcon('Advanced Logistics Network', jumpPortal));
         upgradeTips.push('Advanced Logistics Network\nEnables Ansiblex jump bridge');
+        upgradeClasses.push(undefined);
       }
       if (sys.hasCynoBeacon) {
         upgradeIcons.push(dbIcon('Cynosural Navigation', cynoBeacon));
         upgradeTips.push('Cynosural Navigation\nEnables cynosural beacon');
+        upgradeClasses.push(undefined);
       }
       if (sys.hasCynoJammer) {
         upgradeIcons.push(dbIcon('Cynosural Suppression', cynoJammer));
         upgradeTips.push('Cynosural Suppression\nBlocks cynos (except covert)');
+        upgradeClasses.push(undefined);
       }
       if (sys.hasSupercap) {
         upgradeIcons.push(dbIcon('Supercapital Construction Facilities', supercapIcon));
         upgradeTips.push('Supercapital Construction Facilities');
+        upgradeClasses.push('evesov-icon--supercap');
       }
       if (sys.hasRelicSites) {
         upgradeIcons.push(dbIconAny(sys.relicUpgrades, relicSite));
         upgradeTips.push(`${sys.relicUpgrades.join(', ')}\nSpawns relic and data sites`);
+        upgradeClasses.push(undefined);
       }
       if (sys.stabilityEffect && STABILITY_ICONS[sys.stabilityEffect]) {
         upgradeIcons.push(dbIcon(sys.stabilityEffect, STABILITY_ICONS[sys.stabilityEffect]));
         upgradeTips.push(sys.stabilityEffect);
+        upgradeClasses.push(undefined);
       }
 
       // Structure icons above node: bottom of row sits just above the node top
@@ -603,7 +660,7 @@ export function RegionMap() {
       }
       // Upgrade icons below node: top of row sits just below the node bottom
       if (upgradeIcons.length > 0) {
-        addIconRow(upgradeIcons, cx, p.y + NODE_H + 2, upgradeTips);
+        addIconRow(upgradeIcons, cx, p.y + NODE_H + 2, upgradeTips, upgradeClasses);
       }
 
       // Stat label inside the node, in the lower band where alliance text used to appear.
@@ -619,6 +676,7 @@ export function RegionMap() {
           txt.setAttribute('font-weight', 'bold');
           txt.setAttribute('fill', '#d8dee9');
           txt.setAttribute('pointer-events', 'none');
+          if (statMode.startsWith('moon-')) txt.setAttribute('class', 'evesov-moon-label');
           txt.textContent = label;
           g.appendChild(txt);
         }
@@ -644,6 +702,7 @@ export function RegionMap() {
         txt.setAttribute('font-weight', 'bold');
         txt.setAttribute('fill', '#d8dee9');
         txt.setAttribute('pointer-events', 'none');
+        txt.setAttribute('class', 'evesov-moon-label');
         txt.textContent = label;
         g.appendChild(txt);
       }
@@ -703,6 +762,7 @@ export function RegionMap() {
         const vb = svgEl.getAttribute('viewBox');
         const [, , vbW, vbH] = vb ? vb.split(' ').map(Number) : [0, 0, 0, 0];
         const clone = svgEl.cloneNode(true) as SVGSVGElement;
+        applyRegionMapOpsec(clone);
         clone.setAttribute('width', String(vbW));
         clone.setAttribute('height', String(vbH));
         // Embed a dark background rect so the SVG looks the same when opened standalone.
@@ -753,6 +813,7 @@ export function RegionMap() {
         const H = vbH * SCALE;
         // Clone so we can set explicit dimensions without affecting the live SVG.
         const clone = svgEl.cloneNode(true) as SVGSVGElement;
+        applyRegionMapOpsec(clone);
         clone.setAttribute('width', String(vbW));
         clone.setAttribute('height', String(vbH));
         const serialised = new XMLSerializer().serializeToString(clone);

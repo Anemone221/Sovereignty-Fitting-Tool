@@ -27,7 +27,7 @@ CREATE TABLE export_config (
 `export_config` keys (`'1'`/`'0'`):
 `opsec.workforce.{hidePercent,hideCount,hideVisual}`,
 `opsec.power.{hidePercent,hideCount,hideVisual}`,
-`opsec.{hideSupercaps,hideSystemEffects,hideTransferRoute,hideGasIceBalance,hideSystemNames}`.
+`opsec.{hideSupercaps,hideSystemEffects,hideTransferRoute,hideGasIceBalance,hideSystemNames,hideMoonScans,hideMapIcons}`.
 
 ## IPC
 
@@ -114,9 +114,15 @@ Human-readable mirror of the binary. Header `ESOV2T v=2`, then `n=<plan>`, `scop
 
 ## Op-sec capture mode
 
-Op-sec flags do NOT affect live UI. They are applied only while a capture is in flight, via `withOpsecCapture` (in [src/data/opsecCapture.ts](../../src/data/opsecCapture.ts)) which sets `useOpsec.captureActive = true`, awaits two animation frames so the redacted DOM is committed, runs `html2canvas`, then resets. Each per-panel export wraps its `html2canvas` call this way.
+Op-sec flags do NOT affect live UI. They are applied only while a capture is in flight, via `withOpsecCapture` (in [src/data/opsecCapture.ts](../../src/data/opsecCapture.ts)) which sets `useOpsec.captureActive = true`, awaits two animation frames so the redacted DOM is committed, runs the capture, then resets. Each per-panel export wraps its capture this way.
 
-`OpsecRoot` (in [src/components/OpsecRoot.tsx](../../src/components/OpsecRoot.tsx)) reflects the *effective* (capture-time) flags onto `<body>` as `data-opsec-*` attributes; CSS rules in [src/styles.css](../../src/styles.css) hide elements like `.matrix__system-bars`, `.status-tag`, transfer-route hints, and gas/ice deltas. Text-substitution redactions (e.g. system names → `System-N`) are component-level and consult `useEffectiveOpsec()`.
+`OpsecRoot` (in [src/components/OpsecRoot.tsx](../../src/components/OpsecRoot.tsx)) reflects the *effective* (capture-time) flags onto `<body>` as `data-opsec-*` attributes; CSS rules in [src/styles.css](../../src/styles.css) drive most redactions for the html2canvas-based panels (Matrix, Sites, Inspector, SystemDetail).
+
+Three redaction layers, depending on what's being captured:
+
+1. **CSS via body attributes** — works for html2canvas captures where the DOM is rendered inside the document body (Matrix, Sites, Inspector, SystemDetail moon section). Examples: `.status-tag`, `.matrix__transfer-route`, `[data-supercap="1"]`, `[data-opsec-moon="1"]`, `.effect-badge__icon` inside `.overview` / `.inspector`.
+2. **Text substitution via `useEffectiveOpsec()`** — components rewrite text nodes (system names → `System-N`, constellation names → `Constellation-N`). Used by AssignmentMatrix, SitesOverview, PlanInspector.
+3. **Imperative SVG scrubbing** — RegionMap's PNG/SVG export paths render a *cloned* SVG standalone (via an `<img>` data URL or direct serialisation), so body-level CSS does NOT apply. `applyRegionMapOpsec(clone)` mutates the clone before serialisation: removes `<image>` icons under `#evesov-overlay` (when `hideMapIcons` or `hideSupercaps`), removes `.evesov-moon-label` text (when `hideMoonScans`), and rewrites dotlan system-name `<text>` nodes to `Sys-N` (when `hideSystemNames`). The live SVG is never touched.
 
 The pill (`<OpsecPill />`) is driven by the configured flags (not capture state), so it reads green whenever any redaction is queued for the next capture. Click → focuses the Exports panel.
 
@@ -150,6 +156,5 @@ The pill (`<OpsecPill />`) is driven by the configured flags (not capture state)
 
 - Add a SystemDetail PNG row (system picker + capture).
 - Bulk export with a single directory chooser instead of N save dialogs.
-- Map image export (deferred — needs canvas-based universe map renderer).
 - Extend text-substitution redactions: transfer-route source/destination labels, supercap upgrade column headers, gas/ice value substitution (currently CSS-hidden).
 - DNA export from file picker, not just clipboard.

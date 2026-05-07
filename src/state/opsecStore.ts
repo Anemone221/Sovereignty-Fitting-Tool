@@ -15,6 +15,8 @@ export interface OpsecFlags {
   hideTransferRoute: boolean;
   hideGasIceBalance: boolean;
   hideSystemNames: boolean;
+  hideMoonScans: boolean;
+  hideMapIcons: boolean;
 }
 
 export const FLAG_KEYS: Record<keyof OpsecFlags, string> = {
@@ -28,7 +30,9 @@ export const FLAG_KEYS: Record<keyof OpsecFlags, string> = {
   hideSystemEffects: 'opsec.hideSystemEffects',
   hideTransferRoute: 'opsec.hideTransferRoute',
   hideGasIceBalance: 'opsec.hideGasIceBalance',
-  hideSystemNames: 'opsec.hideSystemNames'
+  hideSystemNames: 'opsec.hideSystemNames',
+  hideMoonScans: 'opsec.hideMoonScans',
+  hideMapIcons: 'opsec.hideMapIcons'
 };
 
 export const FLAG_LABELS: Record<keyof OpsecFlags, string> = {
@@ -42,7 +46,9 @@ export const FLAG_LABELS: Record<keyof OpsecFlags, string> = {
   hideSystemEffects: 'Hide system effect locations',
   hideTransferRoute: 'Hide importer/exporter routes',
   hideGasIceBalance: 'Hide gas/ice over-under',
-  hideSystemNames: 'Hide system names'
+  hideSystemNames: 'Hide system names',
+  hideMoonScans: 'Hide moon scan data',
+  hideMapIcons: 'Hide all map overlay icons'
 };
 
 const DEFAULTS: OpsecFlags = {
@@ -56,7 +62,9 @@ const DEFAULTS: OpsecFlags = {
   hideSystemEffects: false,
   hideTransferRoute: false,
   hideGasIceBalance: false,
-  hideSystemNames: false
+  hideSystemNames: false,
+  hideMoonScans: false,
+  hideMapIcons: false
 };
 
 const PRESETS: Record<Exclude<OpsecPreset, 'custom' | 'none'>, OpsecFlags> = {
@@ -71,7 +79,9 @@ const PRESETS: Record<Exclude<OpsecPreset, 'custom' | 'none'>, OpsecFlags> = {
     hideSystemEffects: true,
     hideTransferRoute: true,
     hideGasIceBalance: true,
-    hideSystemNames: true
+    hideSystemNames: true,
+    hideMoonScans: true,
+    hideMapIcons: true
   },
   internal: {
     ...DEFAULTS,
