@@ -1,5 +1,7 @@
 import { ipcMain } from 'electron';
 import { getDb } from '../db/userDb.js';
+import { getCurrentPriceField, hasMarketData, lookupPrice } from './profitability.js';
+import { purgeMarketData } from './marketSync.js';
 import type {
   Constellation,
   Planet,
@@ -225,4 +227,22 @@ export function registerDataIpc(): void {
     const row = getDb().prepare('SELECT * FROM upgrades WHERE name = ?').get(name) as UpgradeDbRow | undefined;
     return row ? toUpgrade(row) : null;
   });
+
+  ipcMain.handle('data.hasMarketData', (): boolean => {
+    return hasMarketData(getDb());
+  });
+
+  ipcMain.handle('data.purgeMarketData', (): void => {
+    purgeMarketData();
+  });
+
+  ipcMain.handle(
+    'data.priceFor',
+    (_, typeId: number): { price: number; asOf: string; field: string } | null => {
+      const db = getDb();
+      const field = getCurrentPriceField(db);
+      const result = lookupPrice(db, typeId, field);
+      return result ? { price: result.price, asOf: result.asOf, field: result.field } : null;
+    },
+  );
 }

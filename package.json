@@ -37,6 +37,7 @@
     "papaparse": "^5.5.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "unbzip2-stream": "^1.4.3",
     "zustand": "^5.0.6"
   },
   "devDependencies": {

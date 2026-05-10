@@ -192,6 +192,36 @@ CREATE TABLE IF NOT EXISTS moon_scans (
 );
 CREATE INDEX IF NOT EXISTS idx_moon_scans_system ON moon_scans(system_id);
 
+CREATE TABLE IF NOT EXISTS moon_drill_assignments (
+  system_id      INTEGER NOT NULL REFERENCES systems(id),
+  moon_number    INTEGER NOT NULL,
+  structure_type TEXT NOT NULL,
+  PRIMARY KEY (system_id, moon_number)
+);
+
+-- ===== Market data (everef.net daily history) =====
+
+CREATE TABLE IF NOT EXISTS market_history (
+  type_id     INTEGER NOT NULL,
+  region_id   INTEGER NOT NULL,
+  date        TEXT NOT NULL,
+  average     REAL NOT NULL,
+  highest     REAL NOT NULL,
+  lowest      REAL NOT NULL,
+  volume      INTEGER NOT NULL,
+  order_count INTEGER NOT NULL,
+  PRIMARY KEY (type_id, region_id, date)
+);
+CREATE INDEX IF NOT EXISTS idx_market_history_type_date
+  ON market_history(type_id, date DESC);
+
+CREATE TABLE IF NOT EXISTS market_sync_log (
+  date        TEXT PRIMARY KEY,
+  fetched_at  TEXT NOT NULL,
+  row_count   INTEGER NOT NULL,
+  status      TEXT NOT NULL
+);
+
 -- ===== Views =====
 
 DROP VIEW IF EXISTS system_budget;

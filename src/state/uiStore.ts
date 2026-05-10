@@ -8,6 +8,7 @@ type FocusPanelFn = (panelId: string) => void;
 interface UiState {
   selectedSystemId: number | null;
   selectSystem: (id: number | null) => void;
+  setSelectedSystemLocal: (id: number | null) => void;
   activePlanId: number | null;
   activePlanReadOnly: boolean;
   setActivePlan: (id: number | null) => void;
@@ -21,7 +22,11 @@ let focusPanelImpl: FocusPanelFn | null = null;
 
 export const useUi = create<UiState>((set) => ({
   selectedSystemId: null,
-  selectSystem: (id) => set({ selectedSystemId: id }),
+  selectSystem: (id) => {
+    set({ selectedSystemId: id });
+    void evesov.windows.broadcastSelection(id);
+  },
+  setSelectedSystemLocal: (id) => set({ selectedSystemId: id }),
   activePlanId: null,
   activePlanReadOnly: false,
   setActivePlan: (id) => {

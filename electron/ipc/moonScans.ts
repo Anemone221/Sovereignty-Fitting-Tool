@@ -1,6 +1,12 @@
 import { ipcMain } from 'electron';
 import { getDb } from '../db/userDb.js';
 import type { MoonScan, MoonScanSession } from '@shared/index';
+import {
+  computeProfitabilityForMoon,
+  isDrillStructure,
+  type DrillStructureType,
+  type ProfitabilityResult,
+} from './profitability.js';
 
 // Maps ore type name prefix → R-tier. EVE ore names include variants like
 // "Glistening Carnotite" — the base name is matched by checking if the
@@ -228,6 +234,61 @@ export function registerMoonScansIpc(): void {
       systemCount: r.system_count,
     }));
   });
+
+  ipcMain.handle(
+    'moonScans.getDrillTypes',
+    (): { systemId: number; moonNumber: number; structureType: DrillStructureType }[] => {
+      const db = getDb();
+      type Row = { system_id: number; moon_number: number; structure_type: string };
+      const rows = db
+        .prepare('SELECT system_id, moon_number, structure_type FROM moon_drill_assignments')
+        .all() as Row[];
+      return rows
+        .filter((r) => isDrillStructure(r.structure_type))
+        .map((r) => ({
+          systemId: r.system_id,
+          moonNumber: r.moon_number,
+          structureType: r.structure_type as DrillStructureType,
+        }));
+    },
+  );
+
+  ipcMain.handle(
+    'moonScans.setDrillType',
+    (
+      _,
+      systemId: number,
+      moonNumber: number,
+      structureType: DrillStructureType | null,
+    ): void => {
+      const db = getDb();
+      if (structureType === null) {
+        db.prepare(
+          'DELETE FROM moon_drill_assignments WHERE system_id = ? AND moon_number = ?',
+        ).run(systemId, moonNumber);
+      } else {
+        if (!isDrillStructure(structureType)) return;
+        db.prepare(
+          `INSERT INTO moon_drill_assignments (system_id, moon_number, structure_type)
+           VALUES (?, ?, ?)
+           ON CONFLICT(system_id, moon_number) DO UPDATE SET structure_type = excluded.structure_type`,
+        ).run(systemId, moonNumber, structureType);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'moonScans.profitability',
+    (
+      _,
+      systemId: number,
+      moonNumber: number,
+      structureType: DrillStructureType,
+    ): ProfitabilityResult | null => {
+      if (!isDrillStructure(structureType)) return null;
+      return computeProfitabilityForMoon(getDb(), systemId, moonNumber, structureType);
+    },
+  );
 
   ipcMain.handle('moonScans.deleteSession', (_, sessionId: number): void => {
     const db = getDb();

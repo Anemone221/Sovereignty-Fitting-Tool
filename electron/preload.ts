@@ -16,7 +16,14 @@ const api: EveSovApi = {
     upgrades: () => ipcRenderer.invoke('data.upgrades'),
     upgrade: (name) => ipcRenderer.invoke('data.upgrade', name),
     refreshSov: (args) => ipcRenderer.invoke('data.refreshSov', args),
-    exportTemplates: (dir) => ipcRenderer.invoke('data.exportTemplates', dir)
+    exportTemplates: (dir) => ipcRenderer.invoke('data.exportTemplates', dir),
+    hasMarketData: () => ipcRenderer.invoke('data.hasMarketData'),
+    purgeMarketData: () => ipcRenderer.invoke('data.purgeMarketData'),
+    priceFor: (typeId) => ipcRenderer.invoke('data.priceFor', typeId)
+  },
+  marketSync: {
+    run: () => ipcRenderer.invoke('marketSync.run'),
+    status: () => ipcRenderer.invoke('marketSync.status')
   },
   plans: {
     list: () => ipcRenderer.invoke('plans.list'),
@@ -72,6 +79,13 @@ const api: EveSovApi = {
     openPanel: (panelId, params) => ipcRenderer.invoke('windows.openPanel', panelId, params),
     dockBack: (windowId) => ipcRenderer.invoke('windows.dockBack', windowId),
     selectAndFocusSystem: (systemId) => ipcRenderer.invoke('windows.selectAndFocusSystem', systemId),
+    self: () => ipcRenderer.invoke('windows.self'),
+    registerPanels: (panelIds, title) => ipcRenderer.invoke('windows.registerPanels', panelIds, title),
+    unregister: () => ipcRenderer.invoke('windows.unregister'),
+    list: () => ipcRenderer.invoke('windows.list'),
+    sendPanelTo: (targetWindowId, panelId) =>
+      ipcRenderer.invoke('windows.sendPanelTo', targetWindowId, panelId),
+    broadcastSelection: (systemId) => ipcRenderer.invoke('windows.broadcastSelection', systemId),
   },
   exports: {
     capturePng: (filename, dataUrl, meta) =>
@@ -93,6 +107,7 @@ const api: EveSovApi = {
     add: (planId, systemId, structure) => ipcRenderer.invoke('structures.add', planId, systemId, structure),
     remove: (planId, structureId) => ipcRenderer.invoke('structures.remove', planId, structureId),
     importClipboard: (planId, systemId, text) => ipcRenderer.invoke('structures.importClipboard', planId, systemId, text),
+    profitability: (structureId) => ipcRenderer.invoke('structures.profitability', structureId),
   },
   map: {
     regionSvg: (regionId) => ipcRenderer.invoke('map.regionSvg', regionId),
@@ -105,6 +120,11 @@ const api: EveSovApi = {
     list: (systemId?) => ipcRenderer.invoke('moonScans.list', systemId),
     sessions: () => ipcRenderer.invoke('moonScans.sessions'),
     deleteSession: (sessionId) => ipcRenderer.invoke('moonScans.deleteSession', sessionId),
+    getDrillTypes: () => ipcRenderer.invoke('moonScans.getDrillTypes'),
+    setDrillType: (systemId, moonNumber, structureType) =>
+      ipcRenderer.invoke('moonScans.setDrillType', systemId, moonNumber, structureType),
+    profitability: (systemId, moonNumber, structureType) =>
+      ipcRenderer.invoke('moonScans.profitability', systemId, moonNumber, structureType),
   },
   events: {
     on: (channel, listener) => {

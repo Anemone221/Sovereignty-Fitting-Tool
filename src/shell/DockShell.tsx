@@ -1,14 +1,4 @@
 import { evesov } from '@/api/evesov';
-import { AssignmentMatrix } from '@/panels/AssignmentMatrix';
-import { ExportsPage } from '@/panels/ExportsPage';
-import { PlanInspector } from '@/panels/PlanInspector';
-import { PlansPanel } from '@/panels/PlansPanel';
-import { RegionMap } from '@/panels/RegionMap';
-import { SitesOverview } from '@/panels/SitesOverview';
-import { StructuresPage } from '@/panels/StructuresPage';
-import { SystemDetail } from '@/panels/SystemDetail';
-import { TreeExplorer } from '@/panels/TreeExplorer';
-import { UpgradeCatalog } from '@/panels/UpgradeCatalog';
 import { useOpsec } from '@/state/opsecStore';
 import { useUi } from '@/state/uiStore';
 import 'dockview-core/dist/styles/dockview.css';
@@ -16,79 +6,15 @@ import {
     DockviewReact,
     type DockviewApi,
     type DockviewReadyEvent,
-    type IDockviewPanelProps,
 } from 'dockview-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MoonScansPage } from '@/panels/MoonScansPage';
-import { AuditPanel } from '@/panels/AuditPanel';
-import { SettingsPage } from '@/panels/SettingsPage';
 import { ActivityBar } from './ActivityBar';
 import { DEFAULT_PANELS_KEY, parseDefaultPanels } from './defaultPanels';
+import { PANELS, addOrFocusPanel, components } from './dockComponents';
+import { PanelTab } from './PanelTab';
 
 const LAYOUT_KEY = 'dock.layout.v1';
 const ACTIVE_KEY = 'dock.active.v1';
-
-const components: Record<
-    string,
-    React.FunctionComponent<IDockviewPanelProps>
-> = {
-    treeExplorer: () => <TreeExplorer />,
-    systemDetail: () => <SystemDetail />,
-    upgradeCatalog: () => <UpgradeCatalog />,
-    plansPanel: () => <PlansPanel />,
-    planInspector: () => <PlanInspector />,
-    assignmentMatrix: () => <AssignmentMatrix />,
-    sitesOverview: () => <SitesOverview />,
-    structuresPage: () => <StructuresPage />,
-    regionMap: () => <RegionMap />,
-    exportsPage: () => <ExportsPage />,
-    moonScansPage: () => <MoonScansPage />,
-    auditPanel: () => <AuditPanel />,
-    settingsPage: () => <SettingsPage />,
-};
-
-interface PanelDefinition {
-    id: string;
-    componentId: string;
-    title: string;
-    position?: Parameters<DockviewApi['addPanel']>[0]['position'];
-}
-
-const PANELS: Record<string, PanelDefinition> = {
-    tree: { id: 'tree', componentId: 'treeExplorer', title: 'Universe' },
-    system: { id: 'system', componentId: 'systemDetail', title: 'System' },
-    plans: { id: 'plans', componentId: 'plansPanel', title: 'Plans' },
-    inspector: {
-        id: 'inspector',
-        componentId: 'planInspector',
-        title: 'Plan Inspector',
-    },
-    matrix: { id: 'matrix', componentId: 'assignmentMatrix', title: 'Matrix' },
-    sites: { id: 'sites', componentId: 'sitesOverview', title: 'Sites' },
-    upgrades: {
-        id: 'upgrades',
-        componentId: 'upgradeCatalog',
-        title: 'Upgrades',
-    },
-    structures: {
-        id: 'structures',
-        componentId: 'structuresPage',
-        title: 'Structures',
-    },
-    regionMap: { id: 'regionMap', componentId: 'regionMap', title: 'Map' },
-    moonScans: {
-        id: 'moonScans',
-        componentId: 'moonScansPage',
-        title: 'Moon Scans',
-    },
-    exports: { id: 'exports', componentId: 'exportsPage', title: 'Exports' },
-    audit: { id: 'audit', componentId: 'auditPanel', title: 'Audit' },
-    settings: {
-        id: 'settings',
-        componentId: 'settingsPage',
-        title: 'Settings',
-    },
-};
 
 export function DockShell() {
     const apiRef = useRef<DockviewApi | null>(null);
@@ -97,12 +23,15 @@ export function DockShell() {
     const hydrateActivePlan = useUi((s) => s.hydrateActivePlan);
     const registerFocusPanel = useUi((s) => s.registerFocusPanel);
     const activePlanId = useUi((s) => s.activePlanId);
-    const selectSystem = useUi((s) => s.selectSystem);
+    const setSelectedSystemLocal = useUi((s) => s.setSelectedSystemLocal);
     const hydrateOpsec = useOpsec((s) => s.hydrate);
 
     useEffect(() => {
         void hydrateActivePlan();
         void hydrateOpsec();
+        void evesov.windows.self().then((id) => {
+            (window as unknown as { __evesovWindowId?: number }).__evesovWindowId = id;
+        });
     }, [hydrateActivePlan, hydrateOpsec]);
 
     useEffect(() => {
@@ -136,19 +65,7 @@ export function DockShell() {
     const addOrFocus = useCallback((panelId: string) => {
         const api = apiRef.current;
         if (!api) return;
-        const def = PANELS[panelId];
-        if (!def) return;
-        const existing = api.getPanel(def.id);
-        if (existing) {
-            existing.api.setActive();
-            return;
-        }
-        api.addPanel({
-            id: def.id,
-            component: def.componentId,
-            title: def.title,
-            position: def.position,
-        });
+        addOrFocusPanel(api, panelId);
     }, []);
 
     useEffect(() => {
@@ -159,12 +76,19 @@ export function DockShell() {
     useEffect(() => {
         return evesov.events.on('selected-system-changed', (payload) => {
             const { systemId } = payload as { systemId: number };
-            selectSystem(systemId);
+            setSelectedSystemLocal(systemId);
         });
-    }, [selectSystem]);
+    }, [setSelectedSystemLocal]);
 
     useEffect(() => {
         return evesov.events.on('focus-panel-requested', (payload) => {
+            const { panelId } = payload as { panelId: string };
+            addOrFocus(panelId);
+        });
+    }, [addOrFocus]);
+
+    useEffect(() => {
+        return evesov.events.on('add-panel-requested', (payload) => {
             const { panelId } = payload as { panelId: string };
             addOrFocus(panelId);
         });
@@ -264,6 +188,7 @@ export function DockShell() {
             <div className="dock-shell__main">
                 <DockviewReact
                     components={components}
+                    defaultTabComponent={PanelTab}
                     onReady={onReady}
                     className="dockview-theme-abyss dock-shell__dockview"
                 />

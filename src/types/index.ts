@@ -294,8 +294,68 @@ export interface MapOverlayData {
     upgradeIcons: Record<string, string>;
 }
 
+export interface WindowInfo {
+    id: number;
+    title: string;
+    panelIds: string[];
+    isMain: boolean;
+}
+
 export interface MapAuraData {
     aura: Record<number, number>;
+}
+
+export type PriceField =
+    | 'average'
+    | 'lowest'
+    | 'highest'
+    | 'median30'
+    | 'p5_30'
+    | 'vwap30';
+
+export type DrillStructureType = 'Metenox' | 'Athanor' | 'Tatara';
+
+export interface MoonDrillAssignment {
+    systemId: number;
+    moonNumber: number;
+    structureType: DrillStructureType;
+}
+
+export interface ProfitabilityResult {
+    structureId: number | null;
+    structureType: DrillStructureType;
+    revenuePerHour: number;
+    fuelCostPerHour: number;
+    profitPerHour: number;
+    priceField: PriceField;
+    asOf: string;
+    missingPrices: string[];
+}
+
+export interface MarketSyncDayResult {
+    date: string;
+    status: 'ok' | 'missing' | 'error';
+    rowCount: number;
+    error?: string;
+}
+
+export interface MarketSyncResult {
+    daysFetched: number;
+    rowsImported: number;
+    errors: string[];
+    days: MarketSyncDayResult[];
+}
+
+export interface MarketSyncStatus {
+    lastSyncAt: string | null;
+    daysCovered: number;
+    latestDate: string | null;
+}
+
+export interface PriceLookupResult {
+    price: number;
+    asOf: string;
+    field: string;
 }
 
 export interface EveSovApi {
@@ -314,6 +374,13 @@ export interface EveSovApi {
         upgrade: (name: string) => Promise<Upgrade | null>;
         refreshSov: (args: RefreshSovArgs) => Promise<ImportReport>;
         exportTemplates: (dir: string) => Promise<{ written: string[] }>;
+        hasMarketData: () => Promise<boolean>;
+        purgeMarketData: () => Promise<void>;
+        priceFor: (typeId: number) => Promise<PriceLookupResult | null>;
+    };
+    marketSync: {
+        run: () => Promise<MarketSyncResult>;
+        status: () => Promise<MarketSyncStatus>;
     };
     plans: {
         list: () => Promise<PlanSummary[]>;
@@ -420,6 +487,15 @@ export interface EveSovApi {
         ) => Promise<number>;
         dockBack: (windowId: number) => Promise<void>;
         selectAndFocusSystem: (systemId: number) => Promise<void>;
+        self: () => Promise<number>;
+        registerPanels: (panelIds: string[], title?: string) => Promise<void>;
+        unregister: () => Promise<void>;
+        list: () => Promise<WindowInfo[]>;
+        sendPanelTo: (
+            targetWindowId: number,
+            panelId: string,
+        ) => Promise<boolean>;
+        broadcastSelection: (systemId: number | null) => Promise<void>;
     };
     exports: {
         capturePng: (
@@ -455,6 +531,7 @@ export interface EveSovApi {
             systemId: number,
             text: string,
         ) => Promise<{ count: number }>;
+        profitability: (structureId: number) => Promise<ProfitabilityResult | null>;
     };
     map: {
         regionSvg: (regionId: number) => Promise<string | null>;
@@ -467,10 +544,21 @@ export interface EveSovApi {
         list: (systemId?: number) => Promise<MoonScan[]>;
         sessions: () => Promise<MoonScanSession[]>;
         deleteSession: (sessionId: number) => Promise<void>;
+        getDrillTypes: () => Promise<MoonDrillAssignment[]>;
+        setDrillType: (
+            systemId: number,
+            moonNumber: number,
+            structureType: DrillStructureType | null,
+        ) => Promise<void>;
+        profitability: (
+            systemId: number,
+            moonNumber: number,
+            structureType: DrillStructureType,
+        ) => Promise<ProfitabilityResult | null>;
     };
     events: {
         on: (
-            channel: "plan-changed" | "data-refreshed" | "plan-active-changed" | "selected-system-changed" | "focus-panel-requested",
+            channel: "plan-changed" | "data-refreshed" | "plan-active-changed" | "selected-system-changed" | "focus-panel-requested" | "add-panel-requested",
             listener: (payload: unknown) => void,
         ) => () => void;
     };

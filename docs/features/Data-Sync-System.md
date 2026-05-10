@@ -33,8 +33,20 @@ Plan tables (`plans`, `plan_scopes`, `plan_upgrades`, `plan_system_status`) are 
 - **Refresh preserves plan tables.** When per-CSV refresh ships, `DELETE FROM <table>` happens for that table only; everything in the `plan_*` namespace and `preferences` is untouched.
 - **Source files live in `outside_resources/`** (not the repo root): `outside_resources/Sov_Resources/` holds `stars.csv`, `planets.csv`, `sovUpgardes.csv`; `outside_resources/SDE_Resources/` holds the four JSONL files. The directory is not committed. Importers also accept `--data <dir>` to point at any location.
 
+## Market data sync (everef.net)
+
+Pulls daily aggregated market history from `https://data.everef.net/market-history/<year>/market-history-YYYY-MM-DD.csv.bz2`, filters to The Forge (`region_id = 10000002`) and a fixed set of typeIDs (16 moon goos, 4 racial fuel blocks, magmatic gas), and persists per-day rows in `market_history`. Each fetched day is logged in `market_sync_log` so re-runs only download missing days within the trailing 30-day window.
+
+- **Triggers**: manual "Sync now" button on the Settings → Data tab; plus auto-sync on launch when `settings.marketSync.onStartup = 'true'` and the last sync is older than 24h.
+- **Decompression**: `unbzip2-stream` (pure JS, MIT) piped from the `electron.net` response stream.
+- **Filtering happens during the line-by-line parse** so we never buffer an entire dump in memory.
+- **Schema**: `market_history(type_id, region_id, date, average, highest, lowest, volume, order_count)` and `market_sync_log(date, fetched_at, row_count, status)`.
+- **IPC**: `marketSync.run`, `marketSync.status`, `data.hasMarketData`, `data.purgeMarketData`, `data.priceFor(typeId)`.
+- **Critical files**: [electron/ipc/marketSync.ts](../../electron/ipc/marketSync.ts), [electron/ipc/marketTypes.ts](../../electron/ipc/marketTypes.ts), [electron/ipc/profitability.ts](../../electron/ipc/profitability.ts), startup hook in [electron/main.ts](../../electron/main.ts).
+
 ## Open questions / next steps
 - Wire the in-app **Refresh data** dialog (per-CSV picker, summary of imported counts + warnings).
 - Wire the **Generate templates** export.
 - Decide whether to also expose a "Refresh SDE" advanced flow for region/constellation/system updates after a CCP expansion.
 - Bundle the source CSVs/JSONLs into the installer as a fallback so a fresh install works without the user supplying files.
+- Pick the cheapest of the four racial fuel blocks per-call instead of hardcoding Nitrogen (see Structures profitability).

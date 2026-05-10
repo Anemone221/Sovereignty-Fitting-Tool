@@ -23,6 +23,7 @@ Each feature in the app has its own short doc here. The point is to give Claude 
 | [Data-Management.md](Data-Management.md) | Upgrade value editor, system resource overrides, CSV re-import, data purge. |
 | [RegionMap.md](RegionMap.md) | `RegionMap` panel: dotlan SVG base map, upgrade/structure icon overlays, ALN bridge lines, exploration aura, PNG export. |
 | [NpcFactions.md](NpcFactions.md) | NPC pirate-faction icons next to system names in PlanInspector / TreeExplorer / SystemDetail (region-name lookup). |
+| [Windows.md](Windows.md) | Multi-window dock parity: secondary dock shells, send-to-window menu, cross-window selection sync. |
 
 ## Doc template
 

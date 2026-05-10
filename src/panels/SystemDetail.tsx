@@ -13,8 +13,10 @@ import { useUi } from "@/state/uiStore";
 import type {
     AlnLink,
     AlnTarget,
+    DrillStructureType,
     MoonScan,
     PlanStructure,
+    ProfitabilityResult,
     PlanUpgradeRow,
     StructureAddPayload,
     StructureLocation,
@@ -38,6 +40,16 @@ const ORE_TIERS: [string, 4 | 8 | 16 | 32 | 64][] = [
 const MOON_TIER_COLORS: Record<number, string> = {
     4: '#8b949e', 8: '#3fb950', 16: '#58a6ff', 32: '#d29922', 64: '#f85149',
 };
+
+const DRILL_OPTIONS: DrillStructureType[] = ['Metenox', 'Athanor', 'Tatara'];
+
+function formatIsk(value: number): string {
+    const abs = Math.abs(value);
+    if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+    if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+    if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+    return value.toFixed(0);
+}
 
 function oreTier(oreType: string): 4 | 8 | 16 | 32 | 64 | null {
     const lower = oreType.toLowerCase();
@@ -178,6 +190,9 @@ export function SystemDetail() {
     const [highestMoonTier, setHighestMoonTier] = useState<4 | 8 | 16 | 32 | 64 | null>(null);
     const [moonScans, setMoonScans] = useState<MoonScan[]>([]);
     const [collapsedMoons, setCollapsedMoons] = useState<Set<number>>(new Set());
+    const [drillTypes, setDrillTypes] = useState<Record<number, DrillStructureType>>({});
+    const [moonProfit, setMoonProfit] = useState<Record<number, ProfitabilityResult | null>>({});
+    const [hasMarketData, setHasMarketData] = useState(false);
     const [showNpcFaction, setShowNpcFaction] = useState(true);
 
     useEffect(() => {
@@ -307,15 +322,23 @@ export function SystemDetail() {
         }
         setLoading(true);
         void (async () => {
-            const [d, scans] = await Promise.all([
+            const [d, scans, allDrillTypes, hmd] = await Promise.all([
                 evesov.data.system(systemId),
                 evesov.moonScans.list(systemId),
+                evesov.moonScans.getDrillTypes(),
+                evesov.data.hasMarketData(),
             ]);
             if (cancelled) return;
             setDetail(d);
             setMoonScans(scans);
             setCollapsedMoons(new Set(scans.map((s) => s.moonNumber)));
             setHighestMoonTier(computeHighestMoonTier(scans.map((s) => s.oreType)));
+            const dt: Record<number, DrillStructureType> = {};
+            for (const a of allDrillTypes) {
+                if (a.systemId === systemId) dt[a.moonNumber] = a.structureType;
+            }
+            setDrillTypes(dt);
+            setHasMarketData(hmd);
             if (activePlanId !== null && d) {
                 await fetchPlanState(systemId, activePlanId);
             } else {
@@ -345,9 +368,55 @@ export function SystemDetail() {
                 setCollapsedMoons(new Set(scans.map((s) => s.moonNumber)));
                 setHighestMoonTier(computeHighestMoonTier(scans.map((s) => s.oreType)));
             });
+            void evesov.data.hasMarketData().then(setHasMarketData);
         });
         return off;
     }, [systemId]);
+
+    useEffect(() => {
+        if (systemId === null) return;
+        let cancelled = false;
+        void (async () => {
+            const entries = await Promise.all(
+                Object.entries(drillTypes).map(async ([mn, type]) => {
+                    const moonNumber = Number(mn);
+                    const result = await evesov.moonScans.profitability(
+                        systemId,
+                        moonNumber,
+                        type,
+                    );
+                    return [moonNumber, result] as const;
+                }),
+            );
+            if (cancelled) return;
+            setMoonProfit(Object.fromEntries(entries));
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [systemId, drillTypes, hasMarketData]);
+
+    const handleDrillTypeChange = async (
+        moonNumber: number,
+        value: string,
+    ) => {
+        if (systemId === null) return;
+        const next = value === '' ? null : (value as DrillStructureType);
+        await evesov.moonScans.setDrillType(systemId, moonNumber, next);
+        setDrillTypes((prev) => {
+            const copy = { ...prev };
+            if (next === null) delete copy[moonNumber];
+            else copy[moonNumber] = next;
+            return copy;
+        });
+        if (next === null) {
+            setMoonProfit((prev) => {
+                const copy = { ...prev };
+                delete copy[moonNumber];
+                return copy;
+            });
+        }
+    };
 
     useEffect(() => {
         setExportDest("");
@@ -1313,8 +1382,11 @@ export function SystemDetail() {
                                 const moonBest = computeHighestMoonTier(ores.map((o) => o.oreType));
                                 const planetName = ores[0]?.planetName ?? null;
                                 const planetType = ores[0]?.planetType ?? null;
+                                const drillType = drillTypes[moonNumber] ?? '';
+                                const prof = moonProfit[moonNumber];
                                 return (
                                     <div key={moonNumber} className="detail__moon">
+                                        <div className="detail__moon-header-row">
                                         <button
                                             type="button"
                                             className="detail__moon-header"
@@ -1347,6 +1419,28 @@ export function SystemDetail() {
                                                 </span>
                                             )}
                                         </button>
+                                        <select
+                                            className="detail__moon-drill-select"
+                                            value={drillType}
+                                            onChange={(e) =>
+                                                void handleDrillTypeChange(moonNumber, e.target.value)
+                                            }
+                                        >
+                                            <option value="">— None —</option>
+                                            {DRILL_OPTIONS.map((d) => (
+                                                <option key={d} value={d}>{d}</option>
+                                            ))}
+                                        </select>
+                                        {drillType && (
+                                            <span className="detail__moon-profit">
+                                                {!hasMarketData
+                                                    ? 'Enable Data Sync'
+                                                    : prof
+                                                        ? `${formatIsk(prof.profitPerHour)} ISK/hr`
+                                                        : '—'}
+                                            </span>
+                                        )}
+                                        </div>
                                         {!collapsedMoons.has(moonNumber) && ores.map((ore) => {
                                             const tier = oreTier(ore.oreType);
                                             const color = tier ? MOON_TIER_COLORS[tier] : '#8b949e';

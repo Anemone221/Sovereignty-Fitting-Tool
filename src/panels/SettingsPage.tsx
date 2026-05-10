@@ -286,6 +286,157 @@ function PreferencesSection() {
   );
 }
 
+const ON_STARTUP_KEY = 'settings.marketSync.onStartup';
+const PRICE_FIELD_KEY = 'settings.marketSync.priceField';
+
+const PRICE_FIELDS: { value: string; label: string }[] = [
+  { value: 'average', label: "Latest day's average" },
+  { value: 'lowest', label: "Latest day's lowest" },
+  { value: 'highest', label: "Latest day's highest" },
+  { value: 'median30', label: 'Median (last 30 days)' },
+  { value: 'p5_30', label: '5th percentile (last 30 days)' },
+  { value: 'vwap30', label: 'Volume-weighted (last 30 days)' },
+];
+
+interface SyncStatus {
+  lastSyncAt: string | null;
+  daysCovered: number;
+  latestDate: string | null;
+}
+
 function DataPlaceholder() {
-  return <div className="settings__hint">Sync controls, upgrade editor, CSV re-import, and purge — coming next.</div>;
+  const [status, setStatus] = useState<SyncStatus | null>(null);
+  const [onStartup, setOnStartup] = useState(false);
+  const [priceField, setPriceField] = useState('average');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const refresh = async () => {
+    const s = await evesov.marketSync.status();
+    setStatus(s);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [s, startup, field] = await Promise.all([
+        evesov.marketSync.status(),
+        evesov.prefs.get(ON_STARTUP_KEY),
+        evesov.prefs.get(PRICE_FIELD_KEY),
+      ]);
+      if (cancelled) return;
+      setStatus(s);
+      setOnStartup(startup === 'true');
+      if (field) setPriceField(field);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onSyncNow = async () => {
+    setBusy(true);
+    setMessage('Syncing...');
+    try {
+      const result = await evesov.marketSync.run();
+      const errs = result.errors.length > 0 ? ` (${result.errors.length} errors)` : '';
+      setMessage(
+        `Fetched ${result.daysFetched} days, imported ${result.rowsImported} rows${errs}.`,
+      );
+      await refresh();
+    } catch (err) {
+      setMessage(`Sync failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onPurge = async () => {
+    if (!confirm('Delete all market history rows? This cannot be undone.')) return;
+    await evesov.data.purgeMarketData();
+    setMessage('Market data purged.');
+    await refresh();
+  };
+
+  const onToggleStartup = async () => {
+    const next = !onStartup;
+    setOnStartup(next);
+    await evesov.prefs.set(ON_STARTUP_KEY, next ? 'true' : 'false');
+  };
+
+  const onPriceFieldChange = async (value: string) => {
+    setPriceField(value);
+    await evesov.prefs.set(PRICE_FIELD_KEY, value);
+  };
+
+  const lastSyncLabel = status?.lastSyncAt
+    ? new Date(status.lastSyncAt).toLocaleString()
+    : 'Never';
+
+  return (
+    <section className="settings__group">
+      <h3 className="settings__group-title">Market data</h3>
+      <div className="settings__row">
+        <span className="settings__row-label">Status</span>
+        <div className="settings__row-control">
+          <span className="settings__hint">
+            Last sync: {lastSyncLabel} · Days covered: {status?.daysCovered ?? 0}/30
+            {status?.latestDate ? ` · Latest: ${status.latestDate}` : ''}
+          </span>
+        </div>
+      </div>
+      <div className="settings__row">
+        <span className="settings__row-label">Sync</span>
+        <div className="settings__row-control">
+          <button type="button" className="settings__toggle" disabled={busy} onClick={() => void onSyncNow()}>
+            {busy ? 'Syncing...' : 'Sync now'}
+          </button>
+          <button type="button" className="settings__danger" onClick={() => void onPurge()}>
+            Purge market data
+          </button>
+        </div>
+      </div>
+      {message && (
+        <div className="settings__row">
+          <span className="settings__row-label" />
+          <div className="settings__row-control">
+            <span className="settings__hint">{message}</span>
+          </div>
+        </div>
+      )}
+      <div className="settings__row">
+        <span className="settings__row-label">On Startup Market Sync</span>
+        <div className="settings__row-control">
+          <button
+            type="button"
+            className={`settings__toggle${onStartup ? ' settings__toggle--on' : ''}`}
+            onClick={() => void onToggleStartup()}
+          >
+            {onStartup ? 'Enabled' : 'Disabled'}
+          </button>
+          <span className="settings__hint">
+            When enabled and last sync was &gt; 24h ago, fetch the missing days at app launch.
+          </span>
+        </div>
+      </div>
+      <div className="settings__row">
+        <span className="settings__row-label">Price field</span>
+        <div className="settings__row-control">
+          <select
+            value={priceField}
+            onChange={(e) => void onPriceFieldChange(e.target.value)}
+          >
+            {PRICE_FIELDS.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+          <span className="settings__hint">
+            Applied to all profitability calculations (Metenox, Athanor, Tatara).
+          </span>
+        </div>
+      </div>
+    </section>
+  );
 }

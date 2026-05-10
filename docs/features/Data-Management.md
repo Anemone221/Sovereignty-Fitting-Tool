@@ -25,8 +25,10 @@ CREATE TABLE IF NOT EXISTS upgrades_seed (
 - `data.updateSystemResource(systemId, field, value)` — writes to `stars.power` or `planets.power` / `planets.workforce`; broadcasts `data-refreshed`.
 - `data.refreshSov({ kind, path })` — already in `EveSovApi`; wires the existing IPC to a file-picker UI here. Shows import report (counts + warnings) after completion.
 - `data.exportTemplates(dir)` — already in `EveSovApi`; triggered from this page.
-- `data.purgeMarketData()` — deletes from the market data table (created when Data Sync ships).
-- `data.hasMarketData()` → `boolean` — used by Structures profitability gating.
+- `data.purgeMarketData()` — deletes all rows from `market_history` and `market_sync_log`. **Implemented.**
+- `data.hasMarketData()` → `boolean` — used by Structures profitability gating. **Implemented.**
+- `data.priceFor(typeId)` → `{ price, asOf, field } | null` — latest price for a type using the user-selected price field. **Implemented.**
+- `marketSync.run()` / `marketSync.status()` — see Data-Sync-System.md. **Implemented.**
 - `data.importAdmActivities(text)` — parses a CSV or clipboard paste of ADM activity data into `system_adm_activities`; broadcasts `data-refreshed`.
 
 ## Critical files

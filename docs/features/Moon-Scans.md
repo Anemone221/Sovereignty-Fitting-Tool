@@ -22,6 +22,13 @@ CREATE TABLE IF NOT EXISTS moon_scans (
   scan_date   TEXT,
   UNIQUE(system_id, moon_number)
 );
+
+CREATE TABLE IF NOT EXISTS moon_drill_assignments (
+  system_id      INTEGER NOT NULL REFERENCES systems(id),
+  moon_number    INTEGER NOT NULL,
+  structure_type TEXT NOT NULL,         -- 'Metenox' | 'Athanor' | 'Tatara'
+  PRIMARY KEY (system_id, moon_number)
+);
 ```
 
 ## IPC
@@ -30,6 +37,9 @@ CREATE TABLE IF NOT EXISTS moon_scans (
 - `moonScans.list(systemId?)` → `MoonScan[]` — all scans, or filtered to one system.
 - `moonScans.sessions()` → `MoonScanSession[]` — list of import sessions with counts.
 - `moonScans.deleteSession(sessionId)` — cascades to all scans in the session; broadcasts `data-refreshed`.
+- `moonScans.getDrillTypes()` → `MoonDrillAssignment[]` — all (systemId, moonNumber, structureType) selections.
+- `moonScans.setDrillType(systemId, moonNumber, structureType | null)` — upserts or clears the drill assignment for a moon.
+- `moonScans.profitability(systemId, moonNumber, structureType)` → `ProfitabilityResult | null` — computes profit/hr from the moon's scan ores + current price field. Plan-independent; reuses [`computeProfitabilityForMoon`](../../electron/ipc/profitability.ts) which is also called by `structures.profitability` for `plan_structures` rows.
 
 ## Critical files
 
@@ -50,6 +60,7 @@ CREATE TABLE IF NOT EXISTS moon_scans (
 - `UNIQUE(system_id, moon_number)` with `ON CONFLICT DO UPDATE` — re-importing an updated scan overwrites old data without leaving orphans.
 - **Session management** allows deleting stale scan batches. `ON DELETE CASCADE` on `moon_scans.session_id` handles cleanup.
 - **R-tier classification**: ore type matched by substring against 20 canonical names (5 per tier, R4–R64). `oreRTier()` in `moonScans.ts` is the single source of truth, imported by `map.ts` for `map.moonStats`.
+- **Per-moon drill assignment**: each moon row in MoonScansPage has a dropdown (`— None —` / Metenox / Athanor / Tatara). Selecting a type writes to `moon_drill_assignments` and the page fetches `moonScans.profitability` for that moon, displaying `profitPerHour` formatted as `B/M/K ISK/hr`. If `data.hasMarketData()` is false the row shows "Enable Data Sync" instead of a number. Plan-independent on purpose: this is moon-level, not plan-level, configuration.
 - **`data-refreshed`** (not `plan-changed`) is broadcast after a session delete, since moon scans are plan-independent data.
 - `map.moonStats` is plan-scoped — only systems in the active plan's scope within the region are returned. The moon stat modes on the Region Map are only meaningful when a plan is active.
 
@@ -69,5 +80,4 @@ Variant ore names (e.g. "Glistening Carnotite") are matched by substring.
 
 - Bulk import from a directory of scan files (currently clipboard-only).
 - Scan age indicator — scans older than a configurable threshold shown as stale.
-- Integration with market prices for the profitability calculation (see Structures.md).
 - `moonScans.list(systemId)` is available but no per-system drill-down UI in SystemDetail yet.

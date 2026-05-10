@@ -7,6 +7,7 @@ import type {
 } from "@shared/index";
 import { BrowserWindow, ipcMain } from "electron";
 import { getDb } from "../db/userDb.js";
+import { computeProfitability, hasMarketData, type ProfitabilityResult } from "./profitability.js";
 
 function assertWritable(db: ReturnType<typeof getDb>, planId: number): void {
     const row = db.prepare('SELECT read_only FROM plans WHERE id = ?').get(planId) as { read_only: number } | undefined;
@@ -214,6 +215,15 @@ export function registerStructuresIpc(): void {
             })();
             if (count > 0) broadcastPlanChanged(planId);
             return { count };
+        },
+    );
+
+    ipcMain.handle(
+        "structures.profitability",
+        (_, structureId: number): ProfitabilityResult | null => {
+            const db = getDb();
+            if (!hasMarketData(db)) return null;
+            return computeProfitability(db, structureId);
         },
     );
 }

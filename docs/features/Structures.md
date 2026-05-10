@@ -31,7 +31,7 @@ CREATE INDEX IF NOT EXISTS idx_plan_structures_system
 - `structures.add(planId, systemId, structure)` → `{ id }` — inserts a row; broadcasts `plan-changed`.
 - `structures.remove(planId, structureId)` — deletes; broadcasts `plan-changed`.
 - `structures.importClipboard(planId, systemId, text)` → `{ count }` — parses EVE clipboard text, inserts rows; broadcasts `plan-changed`.
-- `structures.profitability(structureId)` → `ProfitabilityResult | null` — null if moon data or market prices are absent.
+- `structures.profitability(structureId)` → `ProfitabilityResult | null` — null if moon data or market prices are absent. Implemented in [electron/ipc/profitability.ts](../../electron/ipc/profitability.ts); applies the user-selected price field (`settings.marketSync.priceField`) and structure-specific refining efficiency (40% Metenox, 96% Athanor/Tatara) and fuel burn (5 fuel blocks/hr + 200 magmatic gas/hr for Metenox).
 
 ## Critical files
 

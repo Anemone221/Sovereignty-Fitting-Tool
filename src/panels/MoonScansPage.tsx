@@ -1,6 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
 import { evesov } from '@/api/evesov';
-import type { MoonScan, MoonScanSession } from '@shared/index';
+import type {
+  DrillStructureType,
+  MoonScan,
+  MoonScanSession,
+  ProfitabilityResult,
+} from '@shared/index';
+
+const DRILL_OPTIONS: DrillStructureType[] = ['Metenox', 'Athanor', 'Tatara'];
+
+function moonKey(systemId: number, moonNumber: number): string {
+  return `${systemId}:${moonNumber}`;
+}
+
+function formatIsk(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toFixed(0);
+}
 
 const R_TIERS = [4, 8, 16, 32, 64] as const;
 
@@ -103,13 +122,66 @@ export function MoonScansPage() {
   const [sessionsCollapsed, setSessionsCollapsed] = useState(true);
   const [filterTier, setFilterTier] = useState<number | null>(null);
   const [searchText, setSearchText] = useState('');
+  const [drillTypes, setDrillTypes] = useState<Record<string, DrillStructureType>>({});
+  const [profitability, setProfitability] = useState<Record<string, ProfitabilityResult | null>>({});
+  const [hasMarketData, setHasMarketData] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [s, sc] = await Promise.all([evesov.moonScans.sessions(), evesov.moonScans.list()]);
+    const [s, sc, dt, hmd] = await Promise.all([
+      evesov.moonScans.sessions(),
+      evesov.moonScans.list(),
+      evesov.moonScans.getDrillTypes(),
+      evesov.data.hasMarketData(),
+    ]);
     setSessions(s);
     setScans(sc);
     setCollapsed(new Set(sc.map((scan) => scan.systemId)));
+    const map: Record<string, DrillStructureType> = {};
+    for (const a of dt) map[moonKey(a.systemId, a.moonNumber)] = a.structureType;
+    setDrillTypes(map);
+    setHasMarketData(hmd);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        Object.entries(drillTypes).map(async ([key, type]) => {
+          const [sid, mn] = key.split(':').map(Number);
+          const result = await evesov.moonScans.profitability(sid, mn, type);
+          return [key, result] as const;
+        }),
+      );
+      if (cancelled) return;
+      setProfitability(Object.fromEntries(entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [drillTypes, hasMarketData]);
+
+  const handleDrillTypeChange = async (
+    systemId: number,
+    moonNumber: number,
+    value: string,
+  ) => {
+    const key = moonKey(systemId, moonNumber);
+    const next = value === '' ? null : (value as DrillStructureType);
+    await evesov.moonScans.setDrillType(systemId, moonNumber, next);
+    setDrillTypes((prev) => {
+      const copy = { ...prev };
+      if (next === null) delete copy[key];
+      else copy[key] = next;
+      return copy;
+    });
+    if (next === null) {
+      setProfitability((prev) => {
+        const copy = { ...prev };
+        delete copy[key];
+        return copy;
+      });
+    }
+  };
 
   useEffect(() => {
     void refresh();
@@ -272,7 +344,11 @@ export function MoonScansPage() {
               </button>
               {!collapsed.has(systemId) && (
                 <div className="moon-scans__moon-list">
-                  {groupByMoon(moons).map(({ moonNumber, ores }) => (
+                  {groupByMoon(moons).map(({ moonNumber, ores }) => {
+                    const key = moonKey(systemId, moonNumber);
+                    const drillType = drillTypes[key] ?? '';
+                    const prof = profitability[key];
+                    return (
                     <div key={moonNumber} className="moon-scans__moon">
                       <div className="moon-scans__moon-header">
                         <span className="moon-scans__moon-num">
@@ -291,6 +367,27 @@ export function MoonScansPage() {
                             );
                           })}
                         </span>
+                        <select
+                          className="moon-scans__drill-select"
+                          value={drillType}
+                          onChange={(e) =>
+                            void handleDrillTypeChange(systemId, moonNumber, e.target.value)
+                          }
+                        >
+                          <option value="">— None —</option>
+                          {DRILL_OPTIONS.map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                        {drillType && (
+                          <span className="moon-scans__profit">
+                            {!hasMarketData
+                              ? 'Enable Data Sync'
+                              : prof
+                                ? `${formatIsk(prof.profitPerHour)} ISK/hr`
+                                : '—'}
+                          </span>
+                        )}
                       </div>
                       {ores.map((ore) => (
                         <div key={ore.id} className="moon-scans__ore-row">
@@ -316,7 +413,8 @@ export function MoonScansPage() {
                         </div>
                       ))}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

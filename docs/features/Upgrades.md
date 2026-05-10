@@ -28,7 +28,7 @@ Upgrades are bucketed into five categories used by the AssignmentMatrix and Site
 
 ## Critical files
 
-- `src/panels/UpgradeCatalog.tsx` — flat filterable table.
+- `src/panels/UpgradeCatalog.tsx` — flat filterable table with click-to-sort headers and a derived Type column.
 - `src/data/upgradeCategories.ts` — `UpgradeCategory`, `CATEGORY_ORDER`, `categoryOf()`.
 - `electron/ipc/data.ts` (`data.upgrades`).
 - `electron/db/schema.ts` — `upgrades` table.
@@ -42,6 +42,5 @@ Upgrades are bucketed into five categories used by the AssignmentMatrix and Site
 ## Open questions / next steps
 
 - Tree view grouping the catalog by category (Matrix and Sites already do).
-- Sort column controls (currently alphabetical).
 - Show site grants for a chosen reference sec bracket via a dropdown.
 - Drone-region variant tables for Threat Detection upgrades.

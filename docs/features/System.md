@@ -34,6 +34,8 @@ Writes via IPC; never touches SQLite directly.
 - `plans.setJumpBridgeLink(planId, systemId, targetSystemId | null, isManual)`.
 - `plans.getJumpBridgeLinks(planId)` → `{ systemId, targetSystemId, isManual }[]`.
 - `structures.list(planId, systemId)` / `structures.add` / `structures.remove` / `structures.importClipboard`.
+- `moonScans.list(systemId)` / `moonScans.getDrillTypes` / `moonScans.setDrillType` / `moonScans.profitability` — moon section drill assignment + per-moon ISK/hr.
+- `data.hasMarketData()` — gates the moon profitability display.
 - `prefs.get/set` — collapse state for the Star and Planets sections (`detail.section.star`, `detail.section.planets`).
 - Subscribes to `plan-changed` to refresh assignments + balance after any mutation.
 
@@ -68,4 +70,3 @@ Writes via IPC; never touches SQLite directly.
 
 - Workforce export/import effect on budget calculation — `transfer_amount` is stored but not yet factored into the consumed/available totals.
 - Drone-region overrides for site grants from Threat Detection arrays.
-- Metenox/Athanor/Tatara profitability in structure cards (requires moon scan data + market prices from Data Sync — see Structures.md).

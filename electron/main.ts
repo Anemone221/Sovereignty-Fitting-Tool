@@ -3,7 +3,8 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerIpc } from './ipc/index.js';
-import { closeDb } from './db/userDb.js';
+import { closeDb, getDb } from './db/userDb.js';
+import { getMarketSyncStatus, runMarketSync } from './ipc/marketSync.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -45,11 +46,27 @@ function createMainWindow(): BrowserWindow {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.evesov.tool');
 
+  let raisingSiblings = false;
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);
+    window.on('focus', () => {
+      if (raisingSiblings) return;
+      raisingSiblings = true;
+      try {
+        for (const other of BrowserWindow.getAllWindows()) {
+          if (other === window || other.isDestroyed()) continue;
+          if (other.isMinimized()) other.restore();
+          other.showInactive();
+        }
+      } finally {
+        raisingSiblings = false;
+      }
+    });
   });
 
   registerIpc();
+
+  maybeStartupMarketSync();
 
   createMainWindow();
 
@@ -57,6 +74,27 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 });
+
+function maybeStartupMarketSync(): void {
+  try {
+    const db = getDb();
+    const row = db
+      .prepare('SELECT value FROM preferences WHERE key = ?')
+      .get('settings.marketSync.onStartup') as { value: string } | undefined;
+    if (row?.value !== 'true') return;
+    const status = getMarketSyncStatus();
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    const stale =
+      status.lastSyncAt == null ||
+      Date.now() - new Date(status.lastSyncAt).getTime() > ONE_DAY_MS;
+    if (!stale) return;
+    void runMarketSync().catch((err) => {
+      console.warn('[marketSync] startup sync failed:', err);
+    });
+  } catch (err) {
+    console.warn('[marketSync] startup sync skipped:', err);
+  }
+}
 
 app.on('window-all-closed', () => {
   closeDb();
