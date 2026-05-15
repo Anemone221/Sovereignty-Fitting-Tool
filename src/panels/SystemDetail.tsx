@@ -1419,6 +1419,15 @@ export function SystemDetail() {
                                                 </span>
                                             )}
                                         </button>
+                                        {drillType && (
+                                            <span className="detail__moon-profit">
+                                                {!hasMarketData
+                                                    ? 'Enable Data Sync'
+                                                    : prof
+                                                        ? `${formatIsk(prof.profitPerHour)} ISK/hr`
+                                                        : '—'}
+                                            </span>
+                                        )}
                                         <select
                                             className="detail__moon-drill-select"
                                             value={drillType}
@@ -1431,15 +1440,6 @@ export function SystemDetail() {
                                                 <option key={d} value={d}>{d}</option>
                                             ))}
                                         </select>
-                                        {drillType && (
-                                            <span className="detail__moon-profit">
-                                                {!hasMarketData
-                                                    ? 'Enable Data Sync'
-                                                    : prof
-                                                        ? `${formatIsk(prof.profitPerHour)} ISK/hr`
-                                                        : '—'}
-                                            </span>
-                                        )}
                                         </div>
                                         {!collapsedMoons.has(moonNumber) && ores.map((ore) => {
                                             const tier = oreTier(ore.oreType);

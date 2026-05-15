@@ -11,6 +11,7 @@ import { FormatBar } from '@/components/FormatBar';
 import { compareSites, siteEffectsFor } from '@/data/effects';
 import { badgesForUpgrades } from '@/data/systemEffects';
 import { CATEGORY_ORDER, categoryOf, type UpgradeCategory } from '@/data/upgradeCategories';
+import { renderHeaderLabel } from '@/data/matrixHeaderLabel';
 import type { PlanMatrix } from '@shared/index';
 
 const FMT_KEYS = ['verticalHeaders', 'breakout'] as const;
@@ -57,6 +58,7 @@ export function SitesOverview() {
     breakout: true,
   });
   const matrixRef = useRef<HTMLDivElement>(null);
+  const [exportScope, setExportScope] = useState<string>('all');
 
   useEffect(() => {
     void Promise.all(FMT_KEYS.map((k) => evesov.prefs.get(FMT_PREF_PREFIX + k))).then((vals) => {
@@ -91,26 +93,72 @@ export function SitesOverview() {
     if (!el || activePlanId === null) return;
     const got = await evesov.plans.get(activePlanId);
     if (!got) return;
-    const dataUrl = await withOpsecCapture(async () => {
-      const canvas = await html2canvas(el, {
-        backgroundColor: '#1a1a1a',
-        width: el.scrollWidth,
-        height: el.scrollHeight,
-        windowWidth: el.scrollWidth,
-        windowHeight: el.scrollHeight,
-        scrollX: 0,
-        scrollY: 0
+    const breakout = fmt.breakout;
+    const scope = breakout ? exportScope : 'all';
+    const hidden: { el: HTMLElement; prev: string }[] = [];
+    if (breakout && scope !== 'all') {
+      el.querySelectorAll<HTMLElement>('[data-export-section]').forEach((s) => {
+        if (s.dataset.exportSection !== scope) {
+          hidden.push({ el: s, prev: s.style.display });
+          s.style.display = 'none';
+        }
       });
-      return canvas.toDataURL('image/png');
+    }
+    let dataUrl: string;
+    try {
+      dataUrl = await withOpsecCapture(async () => {
+      let captureWidth = 0;
+      const tableSelector = breakout && scope !== 'all'
+        ? `[data-export-section="${scope}"] table`
+        : 'table';
+      const grantSelector = breakout && scope !== 'all'
+        ? `[data-export-section="${scope}"] .grants, [data-export-section="${scope}"] .grants__group`
+        : '.grants, .grants__group';
+      el.querySelectorAll<HTMLTableElement>(tableSelector).forEach((t) => {
+        captureWidth = Math.max(captureWidth, t.scrollWidth);
+      });
+      el.querySelectorAll<HTMLElement>(grantSelector).forEach((t) => {
+        captureWidth = Math.max(captureWidth, t.scrollWidth);
+      });
+      if (captureWidth === 0) captureWidth = el.scrollWidth;
+      const PAD = 16;
+      const prevPaddingLeft = el.style.paddingLeft;
+      const prevPaddingTop = el.style.paddingTop;
+      const prevPaddingBottom = el.style.paddingBottom;
+      el.style.paddingLeft = `${PAD}px`;
+      el.style.paddingTop = `${PAD}px`;
+      el.style.paddingBottom = `${PAD}px`;
+      try {
+        const totalWidth = captureWidth + PAD;
+        const totalHeight = el.scrollHeight;
+        const canvas = await html2canvas(el, {
+          backgroundColor: '#1a1a1a',
+          width: totalWidth,
+          height: totalHeight,
+          windowWidth: totalWidth,
+          windowHeight: totalHeight,
+          scrollX: 0,
+          scrollY: 0
+        });
+        return canvas.toDataURL('image/png');
+      } finally {
+        el.style.paddingLeft = prevPaddingLeft;
+        el.style.paddingTop = prevPaddingTop;
+        el.style.paddingBottom = prevPaddingBottom;
+      }
     });
-    const filename = buildExportFilename({ planName: got.plan.name, panel: 'sites' });
+    } finally {
+      for (const h of hidden) h.el.style.display = h.prev;
+    }
+    const scopeLabel = breakout && scope !== 'all' ? scope : null;
+    const filename = buildExportFilename({ planName: got.plan.name, panel: 'sites', systemName: scopeLabel });
     await evesov.exports.capturePng(filename, dataUrl, {
       planId: activePlanId,
       planName: got.plan.name,
       panel: 'sites',
       opsecPreset: useOpsec.getState().preset
     });
-  }, [activePlanId]);
+  }, [activePlanId, fmt.breakout, exportScope]);
 
   useEffect(() => {
     useExportRegistry.getState().register('sites', onExportPng);
@@ -272,6 +320,19 @@ export function SitesOverview() {
       <FormatBar keys={FMT_KEYS} labels={FMT_LABELS} values={fmt} onChange={onFmtChange} />
       <div className="format-bar__actions">
         <OpsecPill />
+        {fmt.breakout && groups.length > 1 && (
+          <select
+            className="matrix__export-scope"
+            value={exportScope}
+            onChange={(e) => setExportScope(e.target.value)}
+            title="Export scope"
+          >
+            <option value="all">All sections</option>
+            {groups.map((g) => (
+              <option key={g.category} value={g.category}>{g.category}</option>
+            ))}
+          </select>
+        )}
         <button type="button" className="matrix__export-btn" onClick={onExportPng}>Export PNG</button>
       </div>
 
@@ -282,7 +343,7 @@ export function SitesOverview() {
           const headersRowClass = `matrix__headers-row${vertical ? ' matrix__headers-row--vertical' : ''}`;
           const colTextClass = `matrix__col-text${vertical ? ' matrix__col-text--vertical' : ''}`;
           const cornerClass = `matrix__sticky-col matrix__corner${vertical ? ' matrix__corner--vertical' : ''}`;
-          const tableClass = `matrix${vertical ? ' matrix--vertical' : ''}`;
+          const tableClass = `matrix${vertical ? ' matrix--vertical' : ' matrix--wide-cols'}`;
           const headingPrefix = sec.heading ? `${sec.heading} — ` : '';
           const totalsHeading = `${headingPrefix}sites totals`;
           const breakdownHeading = `${headingPrefix}per-system breakdown`;
@@ -293,7 +354,7 @@ export function SitesOverview() {
             }
           }
           return (
-            <section key={sec.key} className="inspector__section">
+            <section key={sec.key} className="inspector__section" data-export-section={sec.key}>
               <h3>{totalsHeading}</h3>
               {sec.segments.length > 1 ? (
                 sec.segments.map((seg) => (
@@ -329,7 +390,7 @@ export function SitesOverview() {
                             <div
                               key={seg.category}
                               className="matrix__category-banner"
-                              style={{ width: `${seg.columns.length * 30}px` }}
+                              style={{ width: `${seg.columns.length * (vertical ? 30 : 50)}px` }}
                             >
                               {seg.category}
                             </div>
@@ -341,7 +402,7 @@ export function SitesOverview() {
                             const altCls = i % 2 === 1 ? ' matrix__col--alt' : '';
                             return (
                               <div key={c} className={`matrix__header-slot${endCls}${altCls}`}>
-                                <span className={colTextClass}>{c}</span>
+                                <span className={colTextClass}>{renderHeaderLabel(c, vertical)}</span>
                               </div>
                             );
                           })}

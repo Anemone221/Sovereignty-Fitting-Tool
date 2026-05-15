@@ -31,9 +31,18 @@ function applyRegionMapOpsec(clone: SVGSVGElement): void {
   if (flags.hideMapIcons) {
     clone.querySelectorAll('#evesov-overlay image').forEach((el) => el.remove());
   } else {
+    if (flags.hideStationIcons) {
+      clone.querySelectorAll('#evesov-overlay image.evesov-icon--structure').forEach((el) => el.remove());
+    }
+    if (flags.hideUpgradeIcons) {
+      clone.querySelectorAll('#evesov-overlay image.evesov-icon--upgrade').forEach((el) => el.remove());
+    }
     if (flags.hideSupercaps) {
       clone.querySelectorAll('.evesov-icon--supercap').forEach((el) => el.remove());
     }
+  }
+  if (flags.hideJumpBridges) {
+    clone.querySelector('#evesov-lines')?.remove();
   }
   if (flags.hideMoonScans) {
     clone.querySelectorAll('.evesov-moon-label').forEach((el) => el.remove());
@@ -532,7 +541,8 @@ export function RegionMap() {
       cx: number,
       rowY: number,
       tooltips?: string[],
-      classes?: (string | undefined)[]
+      classes?: (string | undefined)[],
+      baseClass?: string
     ) => {
       const rowW = icons.length * ICON_SIZE + (icons.length - 1) * ICON_GAP;
       const startX = cx - rowW / 2;
@@ -545,7 +555,8 @@ export function RegionMap() {
         img.setAttributeNS(XLINK, 'xlink:href', src);
         img.setAttribute('href', src);
         const cls = classes?.[i];
-        if (cls) img.setAttribute('class', cls);
+        const combined = [baseClass, cls].filter(Boolean).join(' ');
+        if (combined) img.setAttribute('class', combined);
         const tip = tooltips?.[i];
         if (tip) {
           const title = document.createElementNS(NS, 'title');
@@ -656,11 +667,42 @@ export function RegionMap() {
 
       // Structure icons above node: bottom of row sits just above the node top
       if (structureIcons.length > 0) {
-        addIconRow(structureIcons, cx, p.y - ICON_SIZE - 2, structureTips);
+        addIconRow(structureIcons, cx, p.y - ICON_SIZE - 2, structureTips, undefined, 'evesov-icon--structure');
       }
       // Upgrade icons below node: top of row sits just below the node bottom
       if (upgradeIcons.length > 0) {
-        addIconRow(upgradeIcons, cx, p.y + NODE_H + 2, upgradeTips, upgradeClasses);
+        addIconRow(upgradeIcons, cx, p.y + NODE_H + 2, upgradeTips, upgradeClasses, 'evesov-icon--upgrade');
+      }
+
+      const perfectPi = statMode === 'pi-tier'
+        && sys.planetTypes.length > 0
+        && producibleFromPlanets(sys.planetTypes as PlanetType[]).p4.size === 8;
+
+      if (perfectPi) {
+        const fillRect = document.createElementNS(NS, 'rect');
+        fillRect.setAttribute('x', String(p.x - 4.6));
+        fillRect.setAttribute('y', String(p.y - 2.3));
+        fillRect.setAttribute('rx', '17');
+        fillRect.setAttribute('ry', '16');
+        fillRect.setAttribute('width', '67');
+        fillRect.setAttribute('height', '34');
+        fillRect.setAttribute('fill', '#ffd166');
+        fillRect.setAttribute('opacity', '0.25');
+        fillRect.setAttribute('pointer-events', 'none');
+        auraG.appendChild(fillRect);
+
+        const outline = document.createElementNS(NS, 'rect');
+        outline.setAttribute('x', String(p.x - 4.6));
+        outline.setAttribute('y', String(p.y - 2.3));
+        outline.setAttribute('rx', '17');
+        outline.setAttribute('ry', '16');
+        outline.setAttribute('width', '67');
+        outline.setAttribute('height', '34');
+        outline.setAttribute('fill', 'none');
+        outline.setAttribute('stroke', '#ffd166');
+        outline.setAttribute('stroke-width', '2');
+        outline.setAttribute('pointer-events', 'none');
+        g.appendChild(outline);
       }
 
       // Stat label inside the node, in the lower band where alliance text used to appear.
@@ -674,10 +716,10 @@ export function RegionMap() {
           txt.setAttribute('text-anchor', 'middle');
           txt.setAttribute('font-size', '8');
           txt.setAttribute('font-weight', 'bold');
-          txt.setAttribute('fill', '#d8dee9');
+          txt.setAttribute('fill', perfectPi ? '#ffd166' : '#d8dee9');
           txt.setAttribute('pointer-events', 'none');
           if (statMode.startsWith('moon-')) txt.setAttribute('class', 'evesov-moon-label');
-          txt.textContent = label;
+          txt.textContent = perfectPi ? `${label}★` : label;
           g.appendChild(txt);
         }
       }

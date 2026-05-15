@@ -367,6 +367,15 @@ export function MoonScansPage() {
                             );
                           })}
                         </span>
+                        {drillType && (
+                          <span className="moon-scans__profit">
+                            {!hasMarketData
+                              ? 'Enable Data Sync'
+                              : prof
+                                ? `${formatIsk(prof.profitPerHour)} ISK/hr`
+                                : '—'}
+                          </span>
+                        )}
                         <select
                           className="moon-scans__drill-select"
                           value={drillType}
@@ -379,15 +388,6 @@ export function MoonScansPage() {
                             <option key={d} value={d}>{d}</option>
                           ))}
                         </select>
-                        {drillType && (
-                          <span className="moon-scans__profit">
-                            {!hasMarketData
-                              ? 'Enable Data Sync'
-                              : prof
-                                ? `${formatIsk(prof.profitPerHour)} ISK/hr`
-                                : '—'}
-                          </span>
-                        )}
                       </div>
                       {ores.map((ore) => (
                         <div key={ore.id} className="moon-scans__ore-row">

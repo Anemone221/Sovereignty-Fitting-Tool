@@ -1030,6 +1030,11 @@ table.grid td.cost-produces { color: var(--ok); }
   position: relative;
   border-right: 1px solid rgba(255, 255, 255, 0.05);
 }
+.matrix--wide-cols .matrix__header-slot {
+  flex: 0 0 50px;
+  width: 50px;
+  min-width: 50px;
+}
 .matrix__header-slot--total {
   flex: 0 0 40px;
   width: 40px;
@@ -1044,6 +1049,12 @@ table.grid td.cost-produces { color: var(--ok); }
   font-size: 11px;
   white-space: nowrap;
   font-variant-numeric: normal;
+  text-align: left;
+  line-height: 1.1;
+}
+.matrix__col-text-line {
+  display: block;
+  white-space: nowrap;
 }
 .matrix__col-text--total { color: var(--accent); font-weight: 600; }
 
@@ -1066,6 +1077,10 @@ table.grid td.cost-produces { color: var(--ok); }
   border-bottom: 1px solid var(--border);
   width: 30px;
   min-width: 30px;
+}
+.matrix--wide-cols .matrix__totals-cell {
+  width: 50px;
+  min-width: 50px;
 }
 .matrix__totals-label {
   color: var(--fg-dim);
@@ -1103,6 +1118,10 @@ thead .matrix__sticky-col { z-index: 3; background: var(--bg-elev); }
   border-right: 1px solid rgba(255,255,255,0.05);
   width: 30px;
   min-width: 30px;
+}
+.matrix--wide-cols .matrix__cell {
+  width: 50px;
+  min-width: 50px;
 }
 .matrix__col-head { border-right: 1px solid rgba(255,255,255,0.05); }
 .matrix__totals-cell { border-right: 1px solid rgba(255,255,255,0.05); }
@@ -1194,6 +1213,17 @@ thead .matrix__sticky-col { z-index: 3; background: var(--bg-elev); }
 .format-bar__actions {
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.matrix__export-scope {
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 12px;
 }
 
 /* Collapsible section header in System detail */

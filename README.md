@@ -4,59 +4,94 @@ A local desktop tool for planning EVE Online sovereignty (sov) upgrades.
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL_3.0-blue.svg)](LICENSE)
 ![Status: Beta](https://img.shields.io/badge/Status-Beta-blue.svg)
-![Platform: Windows (Electron)](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)
+![Platform: Windows · macOS · Linux](https://img.shields.io/badge/Platform-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-lightgrey.svg)
 [![Build / Beta](https://github.com/unkwntech/eveSovTool/actions/workflows/build_beta.yml/badge.svg)](https://github.com/unkwntech/eveSovTool/actions/workflows/build_beta.yml)
 
 ---
 
 ## What it is
 
-`eveSovTool` is an Electron desktop app for capsuleers and sov-holding alliances who want to plan, balance, and compare their sov upgrades against CCP's current sov mechanics — without standing up a spreadsheet from scratch every time. Pick any combination of regions, constellations, and systems, drop upgrades onto them, and the tool checks every system's resource budget (Power, Workforce, Superionic Ice/h, Magmatic Gas/h) against what its planets and star can supply. Plans, layouts, and preferences are stored locally; the app never uploads or downloads anything.
+`eveSovTool` is a desktop app for capsuleers and sov-holding alliances who want to plan, balance, and compare their sov upgrades against CCP's current sov mechanics — without standing up a spreadsheet from scratch every time.
+
+Pick any combination of regions, constellations, and systems, drop upgrades onto them, and the tool checks every system's resource budget (Power, Workforce, Superionic Ice/h, Magmatic Gas/h) against what its planets and star can supply. Plans, layouts, and preferences are stored locally; the app never uploads or downloads anything.
 
 ## Installing
 
-### MacOS
+Pre-built installers for Windows, macOS, and Linux are published as artifacts on the [Build / Beta](https://github.com/unkwntech/eveSovTool/actions/workflows/build_beta.yml) workflow (every push to `main`) and on tagged releases.
 
-Due to Apple's requirement that all apps on MacOS must be [Signed & Notarized](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution) after adding the app to the Applications folder you will get an error when trying to launch it.
+### Windows
 
-![Screenshot of MacOS Error saying "Sov Fitting Tool Is Damaged and Can’t Be Opened. You Should Move It To The Trash"](/docs/install/macos/unsignederror.png)
+Download the installer or portable ZIP and run it. No extra steps.
 
-To remove this message and run the app you can remove the quarantine flag from the app with the following terminal command.
+### macOS
 
-`xattr -c /Applications/Sov\ Fitting\ Tool.app`
+The macOS build is currently unsigned. After dragging the app to **Applications**, the first launch will fail with:
 
+![Screenshot of MacOS Error saying "Sov Fitting Tool Is Damaged and Can't Be Opened. You Should Move It To The Trash"](/docs/install/macos/unsignederror.png)
+
+Clear the quarantine flag from a terminal:
+
+```bash
+xattr -c /Applications/Sov\ Fitting\ Tool.app
+```
+
+Then launch normally. (Apple requires apps be [Signed & Notarized](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution); this project doesn't have a signing identity yet.)
+
+### Linux
+
+A `.deb` and an AppImage are published per build. Install or run them directly — no special setup required.
 
 ## Screenshots
 
-> *Coming once the UI settles.* The activity bar gives access to: **Universe explorer**, **System detail**, **Plans**, **Plan Inspector**, **Assignment Matrix**, **Sites overview**, and **Upgrade catalog**. Panels are dockable and remember their layout between sessions.
+> *Coming once the UI settles.* The activity bar gives access to: **Universe explorer**, **System detail**, **Plans**, **Plan Inspector**, **Assignment Matrix**, **Sites overview**, **Upgrade catalog**, **Region Map**, **Structures**, **Moon Scans**, and **Settings**. Panels are dockable, tear out into separate windows, and remember their layout between sessions.
 
 ## Features
 
-- **Browse all of New Eden** as a region → constellation → system tree, with sov-eligible space highlighted.
-- **Universe plans** — named, multiple-coexisting plans that can scope any mix of regions, constellations, and individual systems. Plans can be duplicated as `(copy)`/`(copy 2)` so you can branch a "what if" without losing your baseline.
-- **Per-system budget validation** — assign upgrades and watch the four resource bars (Power / Workforce / Superionic Ice/h / Magmatic Gas/h) fill up; tooling shows you how much capacity is left and what would push a system over budget. Producer upgrades (negative costs) actually grow your available pool. One-time startup-fuel cost is tracked separately.
-- **Plan Inspector** groups your scope by constellation (region in parens), with per-system balance rows and inline mini-meters showing constellation-level totals.
-- **Assignment Matrix** — one-glance plan-wide grid: every system × every upgrade, with rotated headers and totals row. Supports PNG export with op-sec redaction.
-- **Sites Overview** rolls up the anomalies your plan would generate (Threat Detection arrays, Prospecting Arrays — including the bonus Mercoxit anomaly on tier-3 prospectors) per system, with plan-wide totals.
-- **Workforce status** per (plan, system): mark systems as Local / Export / Import / Transit ready for the workforce-routing logic.
-- **Resource & site granting** is sec-bracket aware, matching CCP's published threat-detection tables.
-- **Region Map** — Dotlan SVG base map overlaid with upgrade icons, structure icons, ALN bridge lines, and exploration aura; supports PNG export.
-- **Structures** — track Ansiblex, Metenox, Athanor, Tatara, Sotiyo, and other structures per plan and system. Supports manual add, EVE clipboard import, and auto-generated Ansiblex cards when an ALN upgrade is assigned.
-- **Moon Scans** — paste EVE moon survey clipboard data; per-moon ore composition is stored and feeds Metenox/Athanor/Tatara profitability calculations in Structures.
-- **Plan DNA** — compact share strings (`ESOV2B` binary or `ESOV2T` text) for exporting and importing plans between installations. Also accepts legacy `ESOV1` imports.
-- **Op-sec capture mode** — configurable redaction layer (hide system names, workforce counts, gas/ice values, supercap indicators) applied only during PNG export; live UI is unaffected.
-- **Export log** — per-plan history of all PNG and DNA exports, with filename and timestamp.
+### Planning
+
+- **Universe plans** — named, multiple-coexisting plans that can scope any mix of regions, constellations, and individual systems. Duplicate a plan as `(copy)` to branch a "what if" without touching your baseline.
+- **Per-system budget validation** — assign upgrades and watch the four resource bars (Power / Workforce / Superionic Ice/h / Magmatic Gas/h) fill up. The tool shows remaining capacity, flags over-budget systems, and tracks one-time startup-fuel costs separately.
+- **Producer-aware** — upgrades with negative costs (e.g. workforce mecha-tooling) actually grow your available pool.
+- **Sec-bracket awareness** — site grants and effects match CCP's published threat-detection tables.
+
+### Visualisation
+
+- **Universe explorer** — region → constellation → system tree, with sov-eligible space highlighted and NPC pirate-faction icons next to system names.
+- **Plan Inspector** — your scope grouped by constellation, with per-system balance rows and inline mini-meters for constellation totals.
+- **Assignment Matrix** — plan-wide grid of every system × every upgrade, with rotated headers and totals row.
+- **Sites Overview** — anomalies your plan would generate (Threat Detection arrays, Prospecting Arrays, the bonus tier-3 Mercoxit anomaly) per system, plus plan-wide totals.
+- **Region Map** — Dotlan SVG base map overlaid with upgrade icons, structure icons, ALN bridge lines, and an exploration aura. Pan / zoom supported.
+
+### Structures & moons
+
+- **Structures** — track Ansiblex, Metenox, Athanor, Tatara, Sotiyo, and others per plan/system. Manual entry, EVE clipboard import, and auto-generated Ansiblex cards when an ALN upgrade is assigned.
+- **Moon Scans** — paste EVE moon survey clipboard data; per-moon ore composition feeds Metenox/Athanor/Tatara profitability calculations.
+- **Workforce status** — mark systems as Local / Export / Import / Transit to drive workforce-routing logic.
+
+### Sharing & exports
+
+- **Plan DNA** — compact share strings (`ESOV2B` binary, `ESOV2T` text) for moving plans between installations. Legacy `ESOV1` imports are also accepted.
+- **PNG export** — Matrix, Inspector, and Region Map all export to image with optional opsec redaction.
+- **Markdown export** — Assignment Matrix can be exported as a markdown table.
+- **Op-sec capture mode** — hide system names, workforce counts, gas/ice values, and supercap indicators in exports only; the live UI is unaffected.
+- **Export log** — per-plan history of every PNG/DNA export with filename and timestamp.
+
+### Workflow
+
+- **Multi-window** — tear any panel out into its own native window; selections and edits stay in sync across windows via IPC events.
+- **Audit tools** — surface common configuration problems in your plans (over-budget systems, missing prerequisites, etc.).
+- **Plan comparison** — view two plans side by side to evaluate alternatives.
+- **Data Management** — in-app upgrade-value editor, per-system resource overrides, CSV re-import, and a data-purge tool.
 - **Settings** — color palettes and theme configuration.
 
 ## Status
 
-This project is in **beta**. Pre-built Windows installers and portable ZIPs are published automatically as GitHub Actions artifacts on every push to `main` (beta build) and on tagged releases. The data layer, plans, all core panels, exports, structures, and moon scans are working end-to-end.
+This project is in **beta**. The data layer, plans, all core panels, exports, structures, moon scans, and multi-window are working end-to-end. Cross-platform builds (Windows installer + portable ZIP, macOS, Linux `.deb` + AppImage) are published automatically.
 
-What's still on the roadmap:
+Still on the roadmap:
 
-- Market data ingestion and structure profitability calculations.
+- Market data ingestion to drive structure profitability calculations.
 - Workforce route validation (export ↔ import pairs and the transit chain between them).
-- Real OS-window tear-out for popping panels into separate native windows.
 - Per-CSV in-app refresh dialog and "Generate templates" export.
 - Cross-entity search, keyboard shortcuts, drone-region site overrides.
 
@@ -90,21 +125,23 @@ npm run seed         # produces resources/seed.db from outside_resources/
 npm run dev          # launches the app
 ```
 
-On first launch, `seed.db` is copied to `%APPDATA%\eve-sov-tool\app.db` and the app reads/writes there. Delete that file to reset to the bundled seed.
+On first launch, `seed.db` is copied to the OS user-data folder (e.g. `%APPDATA%\eve-sov-tool\app.db` on Windows) and the app reads/writes there. Delete that file to reset to the bundled seed.
 
 The seed step runs through Electron itself (`electron electron/seed-entry.cjs`) so it shares the same native-module ABI as the running app — no manual rebuild dance.
 
 ## Build
 
 ```bash
-npm run build     # production bundle into out/
-npm run package   # build + package into a .exe installer and portable .zip under dist/
+npm run build              # production bundle into out/
+npm run package            # Windows installer + portable ZIP under dist/
+npm run package:mac        # macOS build
+npm run package:linux      # Linux .deb + AppImage
 ```
 
 GitHub Actions builds and publishes artifacts automatically:
 
-- **Beta** (`build_beta.yml`) — runs on every push to `main`; produces `eve-sov-tool-win-installer` and `eve-sov-tool-win-portable` artifacts.
-- **Release** (`build_release.yml`) — runs on pushes to the `release` tag; produces the same artifacts for stable releases.
+- **Beta** (`build_beta.yml`) — every push to `main`; produces Windows / macOS / Linux artifacts.
+- **Release** (`build_release.yml`) — pushes to the `release` tag; same artifacts, stable.
 
 ## Scripts
 
@@ -114,26 +151,28 @@ GitHub Actions builds and publishes artifacts automatically:
 | `npm run build` | Production build into `out/`. |
 | `npm run seed` | Rebuild `resources/seed.db` from the CSV/JSONL sources. |
 | `npm run rebuild` | Rebuild native modules (`better-sqlite3`) for Electron. |
-| `npm run typecheck` | Typecheck both the Electron (`tsconfig.node.json`) and renderer (`tsconfig.web.json`) projects. |
+| `npm run typecheck` | Typecheck both the Electron and renderer projects. |
+| `npm run package` / `:mac` / `:linux` | Produce installers for the named platform. |
 
 ## Tech stack
 
-- **Electron 34** + **electron-vite 3** — desktop shell + build pipeline.
+- **Electron 41** + **electron-vite 3** — desktop shell + build pipeline.
 - **React 18** + **TypeScript 5.9** — renderer.
 - **Vite 6** — dev server / bundler.
 - **better-sqlite3 12** — synchronous SQLite, embedded in the main process.
 - **dockview-react 4** — dockable panel layout.
 - **papaparse** — CSV parsing.
 - **zustand** — small renderer-only state stores.
-- **@tanstack/react-table** — used by the Upgrade catalog.
+- **@tanstack/react-table** — used by the Upgrade Catalog.
+- **html2canvas** — PNG exports for Matrix / Inspector / Region Map.
 
 ## Project layout
 
 ```
 eveSovTool/
-├── electron/        # main + preload (Node) — IPC, DB, importers
-├── src/             # renderer (React) — panels, shell, state, types
-├── resources/       # bundled assets (seed.db lives here after `npm run seed`)
+├── electron/             # main + preload (Node) — IPC, DB, importers
+├── src/                  # renderer (React) — panels, shell, state, types
+├── resources/            # bundled assets (seed.db lives here after `npm run seed`)
 ├── docs/features/        # per-feature design docs (see docs/features/INDEX.md)
 ├── outside_resources/    # source CSVs + SDE JSONLs (not committed)
 ├── electron.vite.config.ts
@@ -143,9 +182,9 @@ eveSovTool/
 
 ## Contributing
 
-Issues and PRs are welcome. There is no CI configured yet, so please run `npm run typecheck` and `npm run build` locally before opening a PR.
+Issues and PRs are welcome. There is no CI configured yet beyond the build workflow, so please run `npm run typecheck` and `npm run build` locally before opening a PR.
 
-If you're using an AI coding assistant, point it at [`Claude.MD`](Claude.MD) — that's the working agreement (path aliases, IPC patterns, build workflow, native-module ABI rule, etc.) the existing code follows.
+If you're using an AI coding assistant, point it at [`CLAUDE.md`](CLAUDE.md) — that's the working agreement (path aliases, IPC patterns, build workflow, native-module ABI rule, etc.) the existing code follows.
 
 ## Privacy & data handling
 

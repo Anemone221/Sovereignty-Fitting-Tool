@@ -5,6 +5,7 @@ import { OpsecPill } from "@/components/OpsecPill";
 import { buildExportFilename } from "@/data/exportFilename";
 import { withOpsecCapture } from "@/data/opsecCapture";
 import { upgradeSymbols } from "@/data/upgradeSymbols";
+import { renderHeaderLabel } from "@/data/matrixHeaderLabel";
 import {
     CATEGORY_ORDER,
     categoryOf,
@@ -281,7 +282,7 @@ export function AssignmentMatrix() {
     const headerCellClass = `matrix__headers-cell${vertical ? " matrix__headers-cell--vertical" : ""}`;
     const colTextClass = `matrix__col-text${vertical ? " matrix__col-text--vertical" : ""}`;
     const cornerClass = `matrix__sticky-col matrix__corner${vertical ? " matrix__corner--vertical" : ""}`;
-    const tableClass = `matrix${vertical ? " matrix--vertical" : ""}`;
+    const tableClass = `matrix${vertical ? " matrix--vertical" : " matrix--wide-cols"}`;
     const showUsageCol =
         fmt.colorSystems &&
         !(opsec.powerHideVisual && opsec.workforceHideVisual);
@@ -382,7 +383,7 @@ export function AssignmentMatrix() {
                                         <div
                                             key={g.category}
                                             className="matrix__category-banner"
-                                            style={{ width: `${g.cols.length * 30}px` }}
+                                            style={{ width: `${g.cols.length * (vertical ? 30 : 50)}px` }}
                                         >
                                             {g.category}
                                         </div>
@@ -392,8 +393,9 @@ export function AssignmentMatrix() {
                                     className={`matrix__headers-row${vertical ? " matrix__headers-row--vertical" : ""}`}
                                 >
                                     {columns.map((c, i) => {
-                                        const label = fmt.upgradeSymbols
-                                            ? (upgradeSymbols[c] ?? c)
+                                        const usingSymbol = fmt.upgradeSymbols && upgradeSymbols[c] != null;
+                                        const label = usingSymbol
+                                            ? upgradeSymbols[c]!
                                             : c;
                                         const endCls = categoryEndCols.has(c)
                                             ? " matrix__header-slot--cat-end"
@@ -406,7 +408,7 @@ export function AssignmentMatrix() {
                                                 className={`matrix__header-slot${endCls}${altCls}`}
                                             >
                                                 <span className={colTextClass}>
-                                                    {label}
+                                                    {usingSymbol ? label : renderHeaderLabel(label, vertical)}
                                                 </span>
                                             </div>
                                         );
