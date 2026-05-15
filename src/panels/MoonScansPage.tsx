@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { evesov } from '@/api/evesov';
+import { useUi } from '@/state/uiStore';
 import type {
   DrillStructureType,
   MoonScan,
@@ -113,6 +114,7 @@ function groupBySystem(scans: MoonScan[]): SystemMoons[] {
 }
 
 export function MoonScansPage() {
+  const activePlanId = useUi((s) => s.activePlanId);
   const [sessions, setSessions] = useState<MoonScanSession[]>([]);
   const [scans, setScans] = useState<MoonScan[]>([]);
   const [pasteText, setPasteText] = useState('');
@@ -125,6 +127,13 @@ export function MoonScansPage() {
   const [drillTypes, setDrillTypes] = useState<Record<string, DrillStructureType>>({});
   const [profitability, setProfitability] = useState<Record<string, ProfitabilityResult | null>>({});
   const [hasMarketData, setHasMarketData] = useState(false);
+
+  const [summaryCollapsed, setSummaryCollapsed] = useState(false);
+  const [summaryTierFilter, setSummaryTierFilter] = useState<number | null>(null);
+  const [summaryStructureFilter, setSummaryStructureFilter] = useState<DrillStructureType | 'All'>('All');
+  const [summaryPlanOnly, setSummaryPlanOnly] = useState(false);
+  const [summaryExpanded, setSummaryExpanded] = useState<Set<number>>(new Set());
+  const [planSystemIds, setPlanSystemIds] = useState<Set<number> | null>(null);
 
   const refresh = useCallback(async () => {
     const [s, sc, dt, hmd] = await Promise.all([
@@ -191,6 +200,110 @@ export function MoonScansPage() {
     return evesov.events.on('data-refreshed', () => void refresh());
   }, [refresh]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (activePlanId == null) {
+        setPlanSystemIds(null);
+        return;
+      }
+      const ids = await evesov.plans.getSystemIds(activePlanId);
+      if (!cancelled) setPlanSystemIds(new Set(ids));
+    };
+    void load();
+    const off = evesov.events.on('plan-changed', () => void load());
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [activePlanId]);
+
+  const summary = useMemo(() => {
+    interface MoonRow {
+      systemId: number;
+      systemName: string;
+      moonNumber: number;
+      planetName: string | null;
+      structureType: DrillStructureType;
+      maxTier: number | null;
+      profitPerHour: number | null;
+    }
+    const rows: MoonRow[] = [];
+    const scansByMoon = new Map<string, MoonScan[]>();
+    for (const sc of scans) {
+      const k = moonKey(sc.systemId, sc.moonNumber);
+      if (!scansByMoon.has(k)) scansByMoon.set(k, []);
+      scansByMoon.get(k)!.push(sc);
+    }
+    for (const [key, structureType] of Object.entries(drillTypes)) {
+      const [sidStr, mnStr] = key.split(':');
+      const systemId = Number(sidStr);
+      const moonNumber = Number(mnStr);
+      const moonScans = scansByMoon.get(key);
+      if (!moonScans || moonScans.length === 0) continue;
+      if (summaryPlanOnly && planSystemIds && !planSystemIds.has(systemId)) continue;
+      if (summaryStructureFilter !== 'All' && structureType !== summaryStructureFilter) continue;
+      const tiers = moonScans
+        .map((s) => parseInt(tierLabel(s.oreType).slice(1), 10))
+        .filter((n) => !Number.isNaN(n));
+      const maxTier = tiers.length > 0 ? Math.max(...tiers) : null;
+      if (summaryTierFilter !== null && maxTier !== summaryTierFilter) continue;
+      const prof = profitability[key];
+      rows.push({
+        systemId,
+        systemName: moonScans[0].systemName,
+        moonNumber,
+        planetName: moonScans[0].planetName ?? null,
+        structureType,
+        maxTier,
+        profitPerHour: prof ? prof.profitPerHour : null,
+      });
+    }
+    const bySystem = new Map<
+      number,
+      { systemId: number; systemName: string; moons: MoonRow[]; totalProfit: number; hasMissing: boolean }
+    >();
+    for (const r of rows) {
+      if (!bySystem.has(r.systemId)) {
+        bySystem.set(r.systemId, {
+          systemId: r.systemId,
+          systemName: r.systemName,
+          moons: [],
+          totalProfit: 0,
+          hasMissing: false,
+        });
+      }
+      const g = bySystem.get(r.systemId)!;
+      g.moons.push(r);
+      if (r.profitPerHour == null) g.hasMissing = true;
+      else g.totalProfit += r.profitPerHour;
+    }
+    const systems = [...bySystem.values()]
+      .map((g) => ({
+        ...g,
+        moons: g.moons.sort((a, b) => {
+          const pa = planetOrdinal(a.planetName);
+          const pb = planetOrdinal(b.planetName);
+          if (pa !== pb) return pa - pb;
+          return a.moonNumber - b.moonNumber;
+        }),
+      }))
+      .sort((a, b) => a.systemName.localeCompare(b.systemName));
+    const totalProfit = systems.reduce((s, g) => s + g.totalProfit, 0);
+    const totalMoons = systems.reduce((s, g) => s + g.moons.length, 0);
+    const anyMissing = systems.some((g) => g.hasMissing);
+    return { systems, totalProfit, totalMoons, anyMissing };
+  }, [scans, drillTypes, profitability, summaryTierFilter, summaryStructureFilter, summaryPlanOnly, planSystemIds]);
+
+  const toggleSummarySystem = (systemId: number) => {
+    setSummaryExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(systemId)) next.delete(systemId);
+      else next.add(systemId);
+      return next;
+    });
+  };
+
   const handleImport = async () => {
     if (!pasteText.trim()) return;
     setImporting(true);
@@ -252,6 +365,138 @@ export function MoonScansPage() {
           </button>
           {importResult && <span className="moon-scans__import-result">{importResult}</span>}
         </div>
+      </div>
+
+      <div className="moon-scans__summary">
+        <button
+          type="button"
+          className="moon-scans__section-label moon-scans__section-label--toggle"
+          onClick={() => setSummaryCollapsed((v) => !v)}
+        >
+          <span className="moon-scans__system-toggle">{summaryCollapsed ? '▶' : '▼'}</span>
+          Moon mining income
+          <span className="moon-scans__summary-grand">
+            {!hasMarketData
+              ? 'Enable Data Sync'
+              : summary.totalMoons === 0
+                ? '— no drills assigned'
+                : `${formatIsk(summary.totalProfit)} ISK/hr · ${summary.totalMoons} moon${summary.totalMoons !== 1 ? 's' : ''}${summary.anyMissing ? ' (pending prices)' : ''}`}
+          </span>
+        </button>
+        {!summaryCollapsed && (
+          <>
+            <div className="moon-scans__summary-filters">
+              <div className="moon-scans__tier-filter">
+                <button
+                  type="button"
+                  className={`moon-scans__tier-btn${summaryTierFilter === null ? ' moon-scans__tier-btn--active' : ''}`}
+                  onClick={() => setSummaryTierFilter(null)}
+                >
+                  All
+                </button>
+                {R_TIERS.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    className={`moon-scans__tier-btn${summaryTierFilter === t ? ' moon-scans__tier-btn--active' : ''}`}
+                    style={{ color: TIER_COLORS[t] }}
+                    onClick={() => setSummaryTierFilter(summaryTierFilter === t ? null : t)}
+                    title={`Include moons whose highest-tier ore is R${t}`}
+                  >
+                    R{t}
+                  </button>
+                ))}
+              </div>
+              <select
+                className="moon-scans__drill-select"
+                value={summaryStructureFilter}
+                onChange={(e) =>
+                  setSummaryStructureFilter(e.target.value as DrillStructureType | 'All')
+                }
+              >
+                <option value="All">All structures</option>
+                {DRILL_OPTIONS.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+              <label
+                className={`moon-scans__plan-only${activePlanId == null ? ' moon-scans__plan-only--disabled' : ''}`}
+                title={activePlanId == null ? 'Activate a plan to enable this filter' : 'Only count moons in systems within the active plan scope'}
+              >
+                <input
+                  type="checkbox"
+                  checked={summaryPlanOnly && activePlanId != null}
+                  disabled={activePlanId == null}
+                  onChange={(e) => setSummaryPlanOnly(e.target.checked)}
+                />
+                Active plan systems only
+              </label>
+            </div>
+            {summary.systems.length === 0 ? (
+              <div className="moon-scans__empty">No drill assignments match the current filters.</div>
+            ) : (
+              <div className="moon-scans__summary-list">
+                {summary.systems.map((g) => {
+                  const expanded = summaryExpanded.has(g.systemId);
+                  return (
+                    <div key={g.systemId} className="moon-scans__summary-system">
+                      <button
+                        type="button"
+                        className="moon-scans__summary-row"
+                        onClick={() => toggleSummarySystem(g.systemId)}
+                      >
+                        <span className="moon-scans__system-toggle">{expanded ? '▼' : '▶'}</span>
+                        <span className="moon-scans__system-name">{g.systemName}</span>
+                        <span className="moon-scans__system-count">
+                          {g.moons.length} moon{g.moons.length !== 1 ? 's' : ''}
+                        </span>
+                        <span className="moon-scans__profit">
+                          {!hasMarketData
+                            ? 'Enable Data Sync'
+                            : `${formatIsk(g.totalProfit)} ISK/hr${g.hasMissing ? ' *' : ''}`}
+                        </span>
+                      </button>
+                      {expanded && (
+                        <div className="moon-scans__summary-detail">
+                          {g.moons.map((m) => (
+                            <div
+                              key={`${m.systemId}:${m.moonNumber}`}
+                              className="moon-scans__summary-moon"
+                            >
+                              <span className="moon-scans__moon-num">
+                                {m.planetName
+                                  ? `${m.planetName} - Moon ${m.moonNumber}`
+                                  : `Moon ${m.moonNumber}`}
+                              </span>
+                              {m.maxTier != null && (
+                                <span
+                                  className="moon-scans__tier-badge"
+                                  style={{ color: TIER_COLORS[m.maxTier] }}
+                                >
+                                  R{m.maxTier}
+                                </span>
+                              )}
+                              <span className="moon-scans__summary-structure">
+                                {m.structureType}
+                              </span>
+                              <span className="moon-scans__profit">
+                                {!hasMarketData
+                                  ? '—'
+                                  : m.profitPerHour != null
+                                    ? `${formatIsk(m.profitPerHour)} ISK/hr`
+                                    : '—'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {sessions.length > 0 && (

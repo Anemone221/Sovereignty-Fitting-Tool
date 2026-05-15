@@ -367,6 +367,20 @@ export function registerPlansIpc(): void {
     }
   );
 
+  ipcMain.handle('plans.getSystemIds', (_, planId: number): number[] => {
+    const rows = getDb()
+      .prepare(
+        `SELECT DISTINCT s.id AS id FROM systems s
+           JOIN plan_scopes ps ON
+                (ps.scope_type = 'system'        AND ps.scope_id = s.id)             OR
+                (ps.scope_type = 'constellation' AND ps.scope_id = s.constellation_id) OR
+                (ps.scope_type = 'region'        AND ps.scope_id = s.region_id)
+          WHERE ps.plan_id = ?`
+      )
+      .all(planId) as Array<{ id: number }>;
+    return rows.map((r) => r.id);
+  });
+
   ipcMain.handle(
     'plans.setCapital',
     (_, planId: number, systemId: number, isCapital: boolean): void => {

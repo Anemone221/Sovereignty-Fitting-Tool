@@ -28,6 +28,7 @@ const api: EveSovApi = {
   plans: {
     list: () => ipcRenderer.invoke('plans.list'),
     get: (id) => ipcRenderer.invoke('plans.get', id),
+    getSystemIds: (id) => ipcRenderer.invoke('plans.getSystemIds', id),
     create: (name) => ipcRenderer.invoke('plans.create', name),
     rename: (id, name) => ipcRenderer.invoke('plans.rename', id, name),
     duplicate: (id, newName) => ipcRenderer.invoke('plans.duplicate', id, newName),

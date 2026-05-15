@@ -770,10 +770,11 @@ table.grid td.cost-produces { color: var(--ok); }
 .assigned__add {
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
+  /* enabled state uses --fg for legibility; :disabled below handles dim */
   border-radius: 3px;
   padding: 2px 8px;
   font-size: 11px;
-  color: var(--fg-dim);
+  color: var(--fg);
 }
 .assigned__add:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 .assigned__add:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -1703,6 +1704,18 @@ body[data-opsec-map-icons="1"] #evesov-overlay image { display: none !important;
 .moon-scans__btn--danger { color: var(--danger); }
 .moon-scans__btn--danger:hover { border-color: var(--danger); }
 .moon-scans__import-result { font-size: 12px; color: var(--ok); }
+.moon-scans__summary { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.moon-scans__summary-grand { margin-left: auto; font-weight: 600; color: var(--fg); text-transform: none; letter-spacing: 0; font-size: 12px; }
+.moon-scans__summary-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 6px; }
+.moon-scans__plan-only { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-mute); cursor: pointer; }
+.moon-scans__plan-only--disabled { opacity: 0.5; cursor: not-allowed; }
+.moon-scans__summary-list { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+.moon-scans__summary-system { border-top: 1px solid var(--border); }
+.moon-scans__summary-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 0; background: none; border: none; color: var(--fg); cursor: pointer; text-align: left; font: inherit; }
+.moon-scans__summary-row:hover { background: var(--bg-elev); }
+.moon-scans__summary-detail { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 6px 22px; }
+.moon-scans__summary-moon { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-dim); }
+.moon-scans__summary-structure { color: var(--fg-mute); font-size: 11px; }
 .moon-scans__sessions { padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .moon-scans__section-label { font-size: 11px; font-weight: 600; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
 .moon-scans__section-label--toggle { display: flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; padding: 0; width: 100%; text-align: left; }

@@ -475,6 +475,7 @@ export interface EveSovApi {
         searchSystems: (
             query: string,
         ) => Promise<{ systemId: number; systemName: string }[]>;
+        getSystemIds: (planId: number) => Promise<number[]>;
         importCsv: (
             planName: string,
             csvText: string,

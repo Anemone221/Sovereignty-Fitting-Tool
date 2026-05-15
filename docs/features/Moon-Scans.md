@@ -1,7 +1,7 @@
 # Moon scans
 
 ## Purpose
-Storage and display of moon scan data pasted from EVE's moon survey clipboard format. Organises scans by system and moon number, showing ore type, R-tier classification, and percentage per moon. Provides the data source for Metenox/Athanor/Tatara profitability calculations in the Structures feature, and for moon-tier stat overlays on the Region Map.
+Storage and display of moon scan data pasted from EVE's moon survey clipboard format. Organises scans by system and moon number, showing ore type, R-tier classification, and percentage per moon. Provides the data source for Metenox/Athanor/Tatara profitability calculations in the Structures feature, and for moon-tier stat overlays on the Region Map. Also rolls up total ISK/hr across all assigned drills via the summary section at the top of the page, filterable by max-tier-present, structure type, and active-plan scope.
 
 ## Schema
 
@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS moon_drill_assignments (
 - `moonScans.getDrillTypes()` → `MoonDrillAssignment[]` — all (systemId, moonNumber, structureType) selections.
 - `moonScans.setDrillType(systemId, moonNumber, structureType | null)` — upserts or clears the drill assignment for a moon.
 - `moonScans.profitability(systemId, moonNumber, structureType)` → `ProfitabilityResult | null` — computes profit/hr from the moon's scan ores + current price field. Plan-independent; reuses [`computeProfitabilityForMoon`](../../electron/ipc/profitability.ts) which is also called by `structures.profitability` for `plan_structures` rows.
+- `plans.getSystemIds(planId)` → `number[]` — expanded list of system IDs covered by the plan's scopes; used by the summary's "active plan systems only" filter.
 
 ## Critical files
 
@@ -62,6 +63,7 @@ CREATE TABLE IF NOT EXISTS moon_drill_assignments (
 - **R-tier classification**: ore type matched by substring against 20 canonical names (5 per tier, R4–R64). `oreRTier()` in `moonScans.ts` is the single source of truth, imported by `map.ts` for `map.moonStats`.
 - **Per-moon drill assignment**: each moon row in MoonScansPage has a dropdown (`— None —` / Metenox / Athanor / Tatara). Selecting a type writes to `moon_drill_assignments` and the page fetches `moonScans.profitability` for that moon, displaying `profitPerHour` formatted as `B/M/K ISK/hr`. If `data.hasMarketData()` is false the row shows "Enable Data Sync" instead of a number. Plan-independent on purpose: this is moon-level, not plan-level, configuration.
 - **`data-refreshed`** (not `plan-changed`) is broadcast after a session delete, since moon scans are plan-independent data.
+- **Summary section** at the top of the page aggregates over `moon_drill_assignments` only (not `plan_structures`). A moon's tier for filter purposes is the **max R-tier present** in its ore composition — the whole moon's profit counts toward that tier; the filter does not slice ISK by ore. Grouped by system, expandable to per-moon detail. Grand total ISK/hr and moon count shown in the header. Plan-only checkbox uses `plans.getSystemIds(activePlanId)` to expand region/constellation scopes to system IDs; disabled when no plan is active.
 - `map.moonStats` is plan-scoped — only systems in the active plan's scope within the region are returned. The moon stat modes on the Region Map are only meaningful when a plan is active.
 
 ## R-tier ore classification
