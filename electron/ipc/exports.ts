@@ -577,7 +577,10 @@ export function registerExportsIpc(): void {
   );
 
   // Moon scan export: serialise all moon_scans rows for systems in the plan's scope.
-  // Format: 'ESOVMS1' + base64(JSON)
+  // Format: 'ESOVMS2' + base64(deflateRaw(JSON))
+  // Row tuple: [system_id, moon_id, moon_number, planet_name, ore_type, ore_percent]
+  // (ESOVMS1 was [system_id, moon_number, ore_type, ore_percent] — no longer emitted; rejected on import
+  // because it can't be safely upgraded to the moon_id-keyed schema.)
   ipcMain.handle('exports.exportMoonScans', (_, planId: number): { data: string } => {
     const db = getDb();
 
@@ -599,28 +602,30 @@ export function registerExportsIpc(): void {
       FROM plan_structures ps WHERE ps.plan_id = ?
     `).all(planId, planId, planId) as ScopeRow[]).map((r) => r.system_id);
 
-    if (planSystemIds.length === 0) return { data: 'ESOVMS1' + Buffer.from('[]', 'utf8').toString('base64') };
+    if (planSystemIds.length === 0) return { data: 'ESOVMS2' + Buffer.from('[]', 'utf8').toString('base64') };
 
     const placeholders = planSystemIds.map(() => '?').join(',');
-    type MoonRow = { system_id: number; moon_number: number; ore_type: string; ore_percent: number };
+    type MoonRow = { system_id: number; moon_id: number; moon_number: number; planet_name: string | null; ore_type: string; ore_percent: number };
     const rows = db.prepare(`
-      SELECT system_id, moon_number, ore_type, ore_percent
+      SELECT system_id, moon_id, moon_number, planet_name, ore_type, ore_percent
       FROM moon_scans WHERE system_id IN (${placeholders})
-      ORDER BY system_id, moon_number, ore_type
+      ORDER BY system_id, moon_id, ore_type
     `).all(...planSystemIds) as MoonRow[];
 
-    // Compact representation: array of [system_id, moon_number, ore_type, ore_percent]
-    const payload = rows.map((r) => [r.system_id, r.moon_number, r.ore_type, r.ore_percent]);
+    const payload = rows.map((r) => [r.system_id, r.moon_id, r.moon_number, r.planet_name, r.ore_type, r.ore_percent]);
     const compressed = deflateRawSync(Buffer.from(JSON.stringify(payload), 'utf8'));
-    const data = 'ESOVMS1' + compressed.toString('base64');
+    const data = 'ESOVMS2' + compressed.toString('base64');
     return { data };
   });
 
-  // Moon scan import: parse ESOVMS1 payload and upsert into moon_scans.
+  // Moon scan import: parse ESOVMS2 payload and upsert into moon_scans.
   // Creates a new import session for the batch.
   ipcMain.handle('exports.importMoonScans', (_, raw: unknown): { systemCount: number; moonsImported: number } => {
     if (typeof raw !== 'string') throw new Error('Moon scan data must be a string.');
-    if (!raw.startsWith('ESOVMS1')) throw new Error('Not a recognised moon scan export (expected ESOVMS1).');
+    if (raw.startsWith('ESOVMS1')) {
+      throw new Error('ESOVMS1 exports were created before the moon-id schema change and can no longer be imported. Please re-export from the source.');
+    }
+    if (!raw.startsWith('ESOVMS2')) throw new Error('Not a recognised moon scan export (expected ESOVMS2).');
 
     let payload: unknown;
     try {
@@ -634,30 +639,36 @@ export function registerExportsIpc(): void {
 
     const db = getDb();
 
-    type Entry = [number, number, string, number];
+    type Entry = [number, number, number, string | null, string, number];
     const entries: Entry[] = [];
     for (const item of payload) {
-      if (!Array.isArray(item) || item.length !== 4) throw new Error('Invalid moon scan row.');
-      const [systemId, moonNumber, oreType, orePercent] = item;
+      if (!Array.isArray(item) || item.length !== 6) throw new Error('Invalid moon scan row.');
+      const [systemId, moonId, moonNumber, planetName, oreType, orePercent] = item;
       if (!Number.isInteger(systemId) || systemId < 1) throw new Error('Invalid system_id in moon scan.');
+      if (!Number.isInteger(moonId) || moonId < 1) throw new Error('Invalid moon_id.');
       if (!Number.isInteger(moonNumber) || moonNumber < 1) throw new Error('Invalid moon_number.');
+      if (planetName !== null && (typeof planetName !== 'string' || planetName.length > 100)) throw new Error('Invalid planet_name.');
       if (typeof oreType !== 'string' || oreType.length === 0 || oreType.length > 100) throw new Error('Invalid ore_type.');
       if (typeof orePercent !== 'number' || orePercent < 0 || orePercent > 1) throw new Error('Invalid ore_percent.');
       if (oreRTier(oreType) === null) throw new Error(`Unknown ore type "${oreType}".`);
       if (!db.prepare('SELECT 1 FROM systems WHERE id = ?').get(systemId)) {
         throw new Error(`System ${systemId} not found in local SDE.`);
       }
-      entries.push([systemId, moonNumber, oreType, orePercent]);
+      entries.push([systemId, moonId, moonNumber, planetName, oreType, orePercent]);
     }
 
     const systemCount = new Set(entries.map(([sid]) => sid)).size;
+    const moonCount = new Set(entries.map(([, mid]) => mid)).size;
     const now = new Date().toISOString();
 
     const upsert = db.prepare(`
-      INSERT INTO moon_scans (session_id, system_id, moon_number, ore_type, ore_percent)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(system_id, moon_number, ore_type) DO UPDATE SET
+      INSERT INTO moon_scans (session_id, system_id, moon_id, moon_number, planet_name, ore_type, ore_percent)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(moon_id, ore_type) DO UPDATE SET
         session_id  = excluded.session_id,
+        system_id   = excluded.system_id,
+        moon_number = excluded.moon_number,
+        planet_name = excluded.planet_name,
         ore_percent = excluded.ore_percent
     `);
     const insertSession = db.prepare(
@@ -666,8 +677,8 @@ export function registerExportsIpc(): void {
 
     db.transaction(() => {
       const sessionId = Number(insertSession.run(now, systemCount).lastInsertRowid);
-      for (const [systemId, moonNumber, oreType, orePercent] of entries) {
-        upsert.run(sessionId, systemId, moonNumber, oreType, orePercent);
+      for (const [systemId, moonId, moonNumber, planetName, oreType, orePercent] of entries) {
+        upsert.run(sessionId, systemId, moonId, moonNumber, planetName, oreType, orePercent);
       }
     })();
 
@@ -675,7 +686,7 @@ export function registerExportsIpc(): void {
       win.webContents.send('data-refreshed');
     }
 
-    return { systemCount, moonsImported: entries.length };
+    return { systemCount, moonsImported: moonCount };
   });
 }
 
