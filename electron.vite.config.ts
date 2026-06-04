@@ -12,7 +12,8 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        '@shared': resolve(__dirname, 'src/types')
+        '@shared': resolve(__dirname, 'src/types'),
+        '@core': resolve(__dirname, 'core')
       }
     }
   },
@@ -25,7 +26,8 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        '@shared': resolve(__dirname, 'src/types')
+        '@shared': resolve(__dirname, 'src/types'),
+        '@core': resolve(__dirname, 'core')
       }
     }
   },
@@ -41,7 +43,8 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src'),
-        '@shared': resolve(__dirname, 'src/types')
+        '@shared': resolve(__dirname, 'src/types'),
+        '@core': resolve(__dirname, 'core')
       }
     },
     plugins: [react()]

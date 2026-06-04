@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import Papa from 'papaparse';
-import type { DB } from '../db/connection.js';
+import type { Db } from '../db/Db.js';
 import type { ImportReport, ImportWarning } from '@shared/index';
 import type { SdeMaps } from '../sde/importer.js';
 
@@ -49,7 +49,7 @@ function num(value: string | undefined): number {
 }
 
 export async function importStarsCsv(
-  db: DB,
+  db: Db,
   path: string,
   maps: Pick<SdeMaps, 'starToSystem' | 'starSpectralClass'>
 ): Promise<ImportReport> {
@@ -121,7 +121,7 @@ export async function importStarsCsv(
 }
 
 export async function importPlanetsCsv(
-  db: DB,
+  db: Db,
   path: string,
   maps: Pick<SdeMaps, 'planetToSystem' | 'planetIdToType'>
 ): Promise<ImportReport> {
@@ -216,7 +216,7 @@ async function resolveUpgradeIds(
 }
 
 export async function importUpgradesCsv(
-  db: DB,
+  db: Db,
   path: string,
   downloader?: (url: string, body?: string) => Promise<Buffer>
 ): Promise<ImportReport> {

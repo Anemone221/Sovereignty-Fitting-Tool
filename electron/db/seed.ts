@@ -8,11 +8,19 @@ import {
     importPlanetsCsv,
     importStarsCsv,
     importUpgradesCsv,
-} from "../csv/importer.js";
-import { importSde, importStargates } from "../sde/importer.js";
-import { regionNameToUrl } from "../sde/dotlanUrl.js";
-import { sanitizeDotlanSvg, loadLegendIcons } from "../sde/svgSanitize.js";
-import { openDatabase } from "./connection.js";
+} from "@core/csv/importer.js";
+import { importSde, importStargates } from "@core/sde/importer.js";
+import { regionNameToUrl } from "@core/sde/dotlanUrl.js";
+import { sanitizeDotlanSvg } from "@core/sde/svgSanitize.js";
+import { loadLegendIcons } from "../sde/legendIcons.js";
+import type { Db } from "@core/db/Db.js";
+import { openDatabase, type DB } from "./connection.js";
+
+// Cast contained to this one boundary: better-sqlite3 satisfies Db structurally
+// but TS can't prove the transaction<T> variance.
+function asCoreDb(db: DB): Db {
+  return db as unknown as Db;
+}
 
 const ROOT = process.cwd();
 const SDE_ZIP_URL =
@@ -277,27 +285,28 @@ async function main() {
     }
 
     const db = openDatabase(args.out);
+    const coreDb = asCoreDb(db);
     try {
         console.log("[seed] importing SDE...");
         const sdeStart = Date.now();
-        const { report: sdeReport, maps } = await importSde(db, sdePaths);
+        const { report: sdeReport, maps } = await importSde(coreDb, sdePaths);
         console.log(`[seed] SDE done in ${Date.now() - sdeStart}ms`);
 
         console.log("[seed] importing stars.csv...");
-        const starsReport = await importStarsCsv(db, csvPaths.stars, maps);
+        const starsReport = await importStarsCsv(coreDb, csvPaths.stars, maps);
 
         console.log("[seed] importing planets.csv...");
         const planetsReport = await importPlanetsCsv(
-            db,
+            coreDb,
             csvPaths.planets,
             maps,
         );
 
         console.log("[seed] importing sovUpgardes.csv...");
-        const upgradesReport = await importUpgradesCsv(db, csvPaths.upgrades, downloadToBuffer);
+        const upgradesReport = await importUpgradesCsv(coreDb, csvPaths.upgrades, downloadToBuffer);
 
         console.log("[seed] importing mapStargates.jsonl...");
-        const stargatesReport = await importStargates(db, sdeFiles.get("mapStargates.jsonl")!);
+        const stargatesReport = await importStargates(coreDb, sdeFiles.get("mapStargates.jsonl")!);
 
         console.log("[seed] fetching dotlan SVG maps...");
         const svgStart = Date.now();

@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { Db } from '../db/Db.js';
 import {
   DRILL_RATE_M3_PER_HOUR,
   EFFICIENCY,
@@ -57,7 +57,7 @@ function quantile(sorted: number[], q: number): number {
 }
 
 export function lookupPrice(
-  db: Database.Database,
+  db: Db,
   typeId: number,
   field: PriceField,
 ): PriceLookup | null {
@@ -115,7 +115,7 @@ export function lookupPrice(
   }
 }
 
-export function getCurrentPriceField(db: Database.Database): PriceField {
+export function getCurrentPriceField(db: Db): PriceField {
   const row = db
     .prepare('SELECT value FROM preferences WHERE key = ?')
     .get('settings.marketSync.priceField') as { value: string } | undefined;
@@ -166,7 +166,7 @@ function findOreYields(oreType: string): Partial<Record<GooKey, number>> | null 
 }
 
 export function computeProfitabilityForMoonId(
-  db: Database.Database,
+  db: Db,
   moonId: number,
   structureType: DrillStructureType,
   structureId: number | null = null,
@@ -182,7 +182,7 @@ export function computeProfitabilityForMoonId(
 }
 
 export function computeProfitabilityForMoon(
-  db: Database.Database,
+  db: Db,
   systemId: number,
   moonNumber: number,
   structureType: DrillStructureType,
@@ -199,7 +199,7 @@ export function computeProfitabilityForMoon(
 }
 
 function computeFromScans(
-  db: Database.Database,
+  db: Db,
   scans: MoonScanRowById[],
   structureType: DrillStructureType,
   structureId: number | null,
@@ -261,7 +261,7 @@ function computeFromScans(
 }
 
 export function computeProfitability(
-  db: Database.Database,
+  db: Db,
   structureId: number,
 ): ProfitabilityResult | null {
   const structure = db
@@ -282,10 +282,9 @@ export function computeProfitability(
   );
 }
 
-export function hasMarketData(db: Database.Database): boolean {
+export function hasMarketData(db: Db): boolean {
   const row = db
     .prepare('SELECT 1 AS ok FROM market_history LIMIT 1')
     .get() as { ok: number } | undefined;
   return !!row;
 }
-

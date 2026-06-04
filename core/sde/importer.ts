@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
-import type { DB } from '../db/connection.js';
+import type { Db } from '../db/Db.js';
 import type { ImportReport, ImportWarning } from '@shared/index';
 
 export interface SdePaths {
@@ -96,7 +96,7 @@ async function readJsonl<T>(path: string): Promise<Array<{ row: T; lineNo: numbe
   return out;
 }
 
-export async function importSde(db: DB, paths: SdePaths): Promise<{ report: ImportReport; maps: SdeMaps }> {
+export async function importSde(db: Db, paths: SdePaths): Promise<{ report: ImportReport; maps: SdeMaps }> {
   const warnings: ImportWarning[] = [];
   const counts = { regions: 0, constellations: 0, systems: 0, stars: 0 };
 
@@ -189,7 +189,7 @@ export async function importSde(db: DB, paths: SdePaths): Promise<{ report: Impo
   };
 }
 
-export async function importStargates(db: DB, path: string): Promise<ImportReport> {
+export async function importStargates(db: Db, path: string): Promise<ImportReport> {
   const rows = await readJsonl<StargateRow>(path);
   const warnings: ImportWarning[] = [];
 

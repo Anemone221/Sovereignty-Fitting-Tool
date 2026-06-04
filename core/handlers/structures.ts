@@ -5,11 +5,12 @@ import type {
     StructureNode,
     StructureType,
 } from "@shared/index";
-import { BrowserWindow, ipcMain } from "electron";
-import { getDb } from "../db/userDb.js";
-import { computeProfitability, hasMarketData, type ProfitabilityResult } from "./profitability.js";
+import { register } from '../registerCore.js';
+import { getDb, type Db } from '../db/Db.js';
+import { getHost } from '../host.js';
+import { computeProfitability, hasMarketData, type ProfitabilityResult } from "../market/profitability.js";
 
-function assertWritable(db: ReturnType<typeof getDb>, planId: number): void {
+function assertWritable(db: Db, planId: number): void {
     const row = db.prepare('SELECT read_only FROM plans WHERE id = ?').get(planId) as { read_only: number } | undefined;
     if (row?.read_only === 1) throw new Error('Plan is read-only');
 }
@@ -97,9 +98,7 @@ function inferType(line: string): {
 }
 
 function broadcastPlanChanged(planId: number): void {
-    for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send("plan-changed", { planId });
-    }
+    getHost().broadcast('plan-changed', { planId });
 }
 
 const LIST_SQL = `
@@ -130,10 +129,10 @@ const LIST_BY_SYSTEM_SQL = `
   ORDER BY ps.id
 `;
 
-export function registerStructuresIpc(): void {
-    ipcMain.handle(
+export function registerStructuresHandlers(): void {
+    register(
         "structures.list",
-        (_, planId: number, systemId?: number): StructureNode[] => {
+        (planId: number, systemId?: number): StructureNode[] => {
             const db = getDb();
             const rows =
                 systemId != null
@@ -147,10 +146,9 @@ export function registerStructuresIpc(): void {
         },
     );
 
-    ipcMain.handle(
+    register(
         "structures.add",
         (
-            _,
             planId: number,
             systemId: number,
             structure: StructureAddPayload,
@@ -175,9 +173,9 @@ export function registerStructuresIpc(): void {
         },
     );
 
-    ipcMain.handle(
+    register(
         "structures.remove",
-        (_, planId: number, structureId: number): void => {
+        (planId: number, structureId: number): void => {
             const db = getDb();
             assertWritable(db, planId);
             db.prepare(
@@ -187,10 +185,9 @@ export function registerStructuresIpc(): void {
         },
     );
 
-    ipcMain.handle(
+    register(
         "structures.importClipboard",
         (
-            _,
             planId: number,
             systemId: number,
             text: string,
@@ -218,9 +215,9 @@ export function registerStructuresIpc(): void {
         },
     );
 
-    ipcMain.handle(
+    register(
         "structures.profitability",
-        (_, structureId: number): ProfitabilityResult | null => {
+        (structureId: number): ProfitabilityResult | null => {
             const db = getDb();
             if (!hasMarketData(db)) return null;
             return computeProfitability(db, structureId);

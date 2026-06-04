@@ -1,6 +1,6 @@
-import { ipcMain } from 'electron';
-import { getDb } from '../db/userDb.js';
-import { reachableSystems } from './adjacency.js';
+import { register } from '../registerCore.js';
+import { getDb } from '../db/Db.js';
+import { reachableSystems } from '../adjacency.js';
 import { oreRTier } from './moonScans.js';
 import type { MapOverlayData, MapSystemOverlay, MapAuraData, MoonCounts } from '@shared/index';
 
@@ -14,8 +14,8 @@ const STABILITY_GENS = new Set([
   'Plasma Stability Generator',
 ]);
 
-export function registerMapIpc(): void {
-  ipcMain.handle('map.regionSvg', (_, regionId: number): string | null => {
+export function registerMapHandlers(): void {
+  register('map.regionSvg', (regionId: number): string | null => {
     const db = getDb();
     const row = db.prepare('SELECT map_svg FROM regions WHERE id = ?').get(regionId) as
       | { map_svg: string | null }
@@ -23,12 +23,11 @@ export function registerMapIpc(): void {
     return row?.map_svg ?? null;
   });
 
-  ipcMain.handle(
+  register(
     'map.overlayData',
-    (_, planId: number, regionId: number): MapOverlayData => {
+    (planId: number, regionId: number): MapOverlayData => {
       const db = getDb();
 
-      // Upgrades per system in this region for this plan
       type UpgradeRow = { system_id: number; upgrade_name: string };
       const upgradeRows = db
         .prepare(
@@ -39,7 +38,6 @@ export function registerMapIpc(): void {
         )
         .all(planId, regionId) as UpgradeRow[];
 
-      // Icons stored in the upgrades table for any upgrade name used in this region.
       type IconRow = { name: string; icon: Buffer | null };
       const uniqueNames = [...new Set(upgradeRows.map((r) => r.upgrade_name))];
       const upgradeIcons: Record<string, string> = {};
@@ -53,7 +51,6 @@ export function registerMapIpc(): void {
         }
       }
 
-      // Structures per system in this region for this plan
       type StructureRow = { system_id: number; structure_type: string };
       const structureRows = db
         .prepare(
@@ -64,7 +61,6 @@ export function registerMapIpc(): void {
         )
         .all(planId, regionId) as StructureRow[];
 
-      // ALN links where either endpoint is in this region (bridges can cross region boundaries).
       type AlnRow = { system_id: number; linked_system_id: number | null };
       const alnRows = db
         .prepare(
@@ -78,14 +74,12 @@ export function registerMapIpc(): void {
         )
         .all(planId, regionId, regionId) as AlnRow[];
 
-      // Security status per system in this region (for tooltip site calculations)
       type SecRow = { id: number; security_status: number | null };
       const secRows = db
         .prepare('SELECT id, security_status FROM systems WHERE region_id = ?')
         .all(regionId) as SecRow[];
       const secMap = new Map<number, number | null>(secRows.map((r) => [r.id, r.security_status]));
 
-      // Planet types per system in this region (for PI tier calculation in the renderer)
       type PlanetTypeRow = { system_id: number; planet_type: string | null };
       const planetTypeRows = db
         .prepare('SELECT system_id, planet_type FROM planets WHERE system_id IN (SELECT id FROM systems WHERE region_id = ?)')
@@ -98,7 +92,6 @@ export function registerMapIpc(): void {
         else planetTypeMap.set(system_id, [planet_type]);
       }
 
-      // Build per-system overlay map
       const overlayMap = new Map<number, MapSystemOverlay>();
 
       const getOrCreate = (systemId: number): MapSystemOverlay => {
@@ -125,7 +118,6 @@ export function registerMapIpc(): void {
         return overlayMap.get(systemId)!;
       };
 
-      // ALN-linked system IDs (systems that have a configured jump bridge target)
       const alnLinked = new Set(alnRows.map((r) => r.system_id));
 
       for (const row of upgradeRows) {
@@ -187,7 +179,6 @@ export function registerMapIpc(): void {
         }
       }
 
-      // Deduplicate ALN pairs as [min, max]
       const pairSet = new Set<string>();
       const alnPairs: [number, number][] = [];
       for (const row of alnRows) {
@@ -209,12 +200,11 @@ export function registerMapIpc(): void {
     },
   );
 
-  ipcMain.handle(
+  register(
     'map.moonStats',
-    (_, planId: number, regionId: number): Record<number, MoonCounts> => {
+    (planId: number, regionId: number): Record<number, MoonCounts> => {
       const db = getDb();
 
-      // Systems in this region that belong to the active plan's scope
       type ScopeRow = { system_id: number };
       const planSystemIds = new Set(
         (db.prepare(`
@@ -241,15 +231,12 @@ export function registerMapIpc(): void {
 
       if (planSystemIds.size === 0) return {};
 
-      // Fetch all moon scan rows for these systems
       type MoonRow = { system_id: number; moon_id: number; ore_type: string };
       const placeholders = [...planSystemIds].map(() => '?').join(',');
       const moonRows = db.prepare(`
         SELECT system_id, moon_id, ore_type FROM moon_scans WHERE system_id IN (${placeholders})
       `).all(...planSystemIds) as MoonRow[];
 
-      // Group by moon_id (canonical EVE id), then determine each moon's
-      // highest R-tier from its materials and count moons per tier.
       const moonBestTier = new Map<number, { systemId: number; tier: 4 | 8 | 16 | 32 | 64 }>();
       for (const { system_id, moon_id, ore_type } of moonRows) {
         const tier = oreRTier(ore_type);
@@ -273,9 +260,9 @@ export function registerMapIpc(): void {
     },
   );
 
-  ipcMain.handle(
+  register(
     'map.auraData',
-    (_, planId: number, regionId: number): MapAuraData => {
+    (planId: number, regionId: number): MapAuraData => {
       const db = getDb();
 
       type SysRow = { system_id: number };
@@ -292,9 +279,7 @@ export function registerMapIpc(): void {
       const aura: Record<number, number> = {};
 
       for (const { system_id } of explorationSystems) {
-        // Include the source system itself
         aura[system_id] = (aura[system_id] ?? 0) + 1;
-        // All systems within 5 stargate hops
         const reachable = reachableSystems(db, system_id, 5);
         for (const id of reachable) {
           aura[id] = (aura[id] ?? 0) + 1;

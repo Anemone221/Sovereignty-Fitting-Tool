@@ -1,12 +1,13 @@
-import { ipcMain } from 'electron';
-import { getDb } from '../db/userDb.js';
+import { register } from '../registerCore.js';
+import { getDb, type Db } from '../db/Db.js';
+import { getHost } from '../host.js';
 import type { MoonScan, MoonScanSession } from '@shared/index';
 import {
   computeProfitabilityForMoonId,
   isDrillStructure,
   type DrillStructureType,
   type ProfitabilityResult,
-} from './profitability.js';
+} from '../market/profitability.js';
 
 // Maps ore type name prefix → R-tier. EVE ore names include variants like
 // "Glistening Carnotite" — the base name is matched by checking if the
@@ -47,18 +48,8 @@ export function oreRTier(oreType: string): 4 | 8 | 16 | 32 | 64 | null {
   return null;
 }
 
-// Parse EVE moon survey clipboard text.
-//
-// Actual format (confirmed from in-game clipboard):
-//   Header row (tab-separated, starts with "Moon"):
-//     Moon\tMoon Product\tQuantity\tOre TypeID\tSolarSystemID\tPlanetID\tMoonID
-//   Moon label row (no leading tab):
-//     7-K5EL II - Moon 1
-//   Ore rows (leading tab, then tab-separated fields):
-//     \tBitumens\t0.298183143139\t45492\t30000224\t40014333\t40014334
-//
-// The moon label row has no leading whitespace; ore rows start with \t.
-// Multiple moon blocks may appear in sequence.
+// Parse EVE moon survey clipboard text. See electron/ipc/moonScans.ts history
+// for the input format.
 function parseMoonSurvey(text: string): {
   systemName: string;
   planetName: string;
@@ -75,23 +66,18 @@ function parseMoonSurvey(text: string): {
   let currentMoonNumber: number | null = null;
 
   for (const line of lines) {
-    // Skip blank lines and the header row
     if (!line.trim()) continue;
     if (/^Moon\t/i.test(line)) continue;
 
     if (line.startsWith('\t')) {
-      // Ore row: \tOreType\tQuantity\tOreTypeID\tSolarSystemID\tPlanetID\tMoonID
       if (currentSystemName === null || currentMoonNumber === null || currentPlanetName === null) continue;
       const cols = line.split('\t');
-      // cols[0] is the empty string before the leading tab
       const oreType = cols[1]?.trim();
       const orePercent = parseFloat(cols[2] ?? '');
       const moonId = parseInt(cols[6] ?? '', 10);
       if (!oreType || Number.isNaN(orePercent) || !Number.isFinite(moonId) || moonId <= 0) continue;
       results.push({ systemName: currentSystemName, planetName: currentPlanetName, moonNumber: currentMoonNumber, moonId, oreType, orePercent });
     } else {
-      // Moon label row: "7-K5EL II - Moon 1"
-      // moonMatch[1] is the planet label e.g. "7-K5EL II"; system name is derived by stripping the trailing word
       const moonMatch = line.trim().match(/^(.+?)\s*-\s*Moon\s+(\d+)$/i);
       if (!moonMatch) continue;
       currentPlanetName = moonMatch[1].trim();
@@ -103,35 +89,23 @@ function parseMoonSurvey(text: string): {
   return results;
 }
 
-// Try to resolve a moon label system name to a system id.
-// The label can be "Jita IV" (system + planet roman numeral).
-// We try: exact match, then strip the last word and try again.
-function resolveSystemId(
-  db: ReturnType<typeof getDb>,
-  label: string,
-): number | null {
+function resolveSystemId(db: Db, label: string): number | null {
   type Row = { id: number };
-
-  // Exact match first (some systems have names that look like "X - Y")
   const exact = db.prepare('SELECT id FROM systems WHERE name = ?').get(label) as Row | undefined;
   if (exact) return exact.id;
-
-  // Strip trailing word (planet roman numeral like "IV", "XII", or Arabic like "3")
   const stripped = label.replace(/\s+\S+$/, '').trim();
   if (stripped && stripped !== label) {
     const row = db.prepare('SELECT id FROM systems WHERE name = ?').get(stripped) as Row | undefined;
     if (row) return row.id;
   }
-
   return null;
 }
 
-export function registerMoonScansIpc(): void {
-  ipcMain.handle('moonScans.import', (_, clipboardText: string) => {
+export function registerMoonScansHandlers(): void {
+  register('moonScans.import', (clipboardText: string) => {
     const db = getDb();
     const parsed = parseMoonSurvey(clipboardText);
 
-    // Resolve system names → ids, skip unresolvable rows
     const resolved = parsed
       .map((r) => ({ ...r, systemId: resolveSystemId(db, r.systemName) }))
       .filter((r): r is typeof r & { systemId: number } => r.systemId !== null);
@@ -178,16 +152,12 @@ export function registerMoonScansIpc(): void {
     })();
 
     const moonsImported = moonIds.size;
-
-    const { BrowserWindow } = require('electron') as typeof import('electron');
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send('data-refreshed');
-    }
+    getHost().broadcast('data-refreshed');
 
     return { sessionId, systemCount, moonsImported };
   });
 
-  ipcMain.handle('moonScans.list', (_, systemId?: number): MoonScan[] => {
+  register('moonScans.list', (systemId?: number): MoonScan[] => {
     const db = getDb();
     type Row = {
       id: number;
@@ -231,7 +201,7 @@ export function registerMoonScansIpc(): void {
     }));
   });
 
-  ipcMain.handle('moonScans.sessions', (): MoonScanSession[] => {
+  register('moonScans.sessions', (): MoonScanSession[] => {
     const db = getDb();
     type Row = { id: number; imported_at: string; system_count: number };
     const rows = db
@@ -244,7 +214,7 @@ export function registerMoonScansIpc(): void {
     }));
   });
 
-  ipcMain.handle(
+  register(
     'moonScans.getDrillTypes',
     (): { moonId: number; systemId: number; structureType: DrillStructureType }[] => {
       const db = getDb();
@@ -262,10 +232,9 @@ export function registerMoonScansIpc(): void {
     },
   );
 
-  ipcMain.handle(
+  register(
     'moonScans.setDrillType',
     (
-      _,
       moonId: number,
       systemId: number,
       structureType: DrillStructureType | null,
@@ -288,10 +257,9 @@ export function registerMoonScansIpc(): void {
     },
   );
 
-  ipcMain.handle(
+  register(
     'moonScans.profitability',
     (
-      _,
       moonId: number,
       structureType: DrillStructureType,
     ): ProfitabilityResult | null => {
@@ -300,13 +268,9 @@ export function registerMoonScansIpc(): void {
     },
   );
 
-  ipcMain.handle('moonScans.deleteSession', (_, sessionId: number): void => {
+  register('moonScans.deleteSession', (sessionId: number): void => {
     const db = getDb();
     db.prepare('DELETE FROM moon_scan_sessions WHERE id = ?').run(sessionId);
-    // Cascade handles moon_scans rows. Notify renderer that scan data changed.
-    const { BrowserWindow } = require('electron') as typeof import('electron');
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send('data-refreshed');
-    }
+    getHost().broadcast('data-refreshed');
   });
 }

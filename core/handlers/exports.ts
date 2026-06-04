@@ -1,8 +1,7 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron';
-import { writeFile } from 'node:fs/promises';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
-import path from 'node:path';
-import { getDb } from '../db/userDb.js';
+import { register } from '../registerCore.js';
+import { getDb } from '../db/Db.js';
+import { getHost } from '../host.js';
 import { oreRTier } from './moonScans.js';
 import {
   encodeDnaV2Binary,
@@ -11,7 +10,7 @@ import {
   decodeDnaV2Text,
   type DnaPlanData,
   type DnaSystemEntry,
-  type ValidatedDna as ValidatedDnaV2
+  type ValidatedDna as ValidatedDnaV2,
 } from '../data/dnaCodec.js';
 
 const NAME_REGEX = /^[\w\s\-_.()]+$/;
@@ -25,9 +24,7 @@ const SCOPE_TYPE_BY_CODE = ['region', 'constellation', 'system'] as const;
 const STATUS_BY_CODE = ['local', 'import', 'export', 'transit'] as const;
 
 function broadcastPlanChanged(planId: number): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send('plan-changed', { planId });
-  }
+  getHost().broadcast('plan-changed', { planId });
 }
 
 function isInt(v: unknown, min = 0, max = Number.MAX_SAFE_INTEGER): v is number {
@@ -94,7 +91,7 @@ function buildPlanDataForExport(
         destinationSystemId: null,
         exportAllUnused: false,
         isCapital: false,
-        alnLinkedSystemId: null
+        alnLinkedSystemId: null,
       };
       systemEntries.set(systemId, entry);
     }
@@ -117,7 +114,7 @@ function buildPlanDataForExport(
   const data: DnaPlanData = {
     name: plan.name,
     scopes: scopeRows.map((r) => ({ scopeType: r.scope_type, scopeId: r.scope_id })),
-    systems: Array.from(systemEntries.values()).sort((a, b) => a.systemId - b.systemId)
+    systems: Array.from(systemEntries.values()).sort((a, b) => a.systemId - b.systemId),
   };
   return { plan, data };
 }
@@ -167,29 +164,24 @@ function logExport(row: {
   return Number(result.lastInsertRowid);
 }
 
-export function registerExportsIpc(): void {
-  ipcMain.handle(
+export function registerExportsHandlers(): void {
+  register(
     'exports.capturePng',
     async (
-      event,
       filename: string,
       dataUrl: string,
       meta?: CapturePngMeta
     ): Promise<CapturePngResult> => {
-      const win = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-      const result = await dialog.showSaveDialog(win!, {
+      const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+      const bytes = Buffer.from(base64, 'base64');
+      const result = await getHost().saveFile({
         title: 'Export PNG',
         defaultPath: filename,
-        filters: [{ name: 'PNG image', extensions: ['png'] }]
+        filters: [{ name: 'PNG image', extensions: ['png'] }],
+        bytes,
+        forceExtension: 'png',
       });
-      if (result.canceled || !result.filePath) return { saved: false };
-
-      const filePath = path.extname(result.filePath).toLowerCase() === '.png'
-        ? result.filePath
-        : result.filePath + '.png';
-
-      const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
-      await writeFile(filePath, Buffer.from(base64, 'base64'));
+      if (!result.saved || !result.path) return { saved: false };
 
       let logId: number | undefined;
       if (meta?.planName) {
@@ -199,35 +191,29 @@ export function registerExportsIpc(): void {
           exportType: meta.panel ? `png-${meta.panel}` : 'png',
           panel: meta.panel ?? null,
           systemName: meta.systemName ?? null,
-          filename: filePath,
-          opsecPreset: meta.opsecPreset ?? null
+          filename: result.path,
+          opsecPreset: meta.opsecPreset ?? null,
         });
       }
-      return { saved: true, path: filePath, logId };
+      return { saved: true, path: result.path, logId };
     }
   );
 
-  ipcMain.handle(
+  register(
     'exports.captureSvg',
     async (
-      event,
       filename: string,
       svgContent: string,
       meta?: CapturePngMeta
     ): Promise<CapturePngResult> => {
-      const win = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-      const result = await dialog.showSaveDialog(win!, {
+      const result = await getHost().saveFile({
         title: 'Export SVG',
         defaultPath: filename,
-        filters: [{ name: 'SVG image', extensions: ['svg'] }]
+        filters: [{ name: 'SVG image', extensions: ['svg'] }],
+        bytes: svgContent,
+        forceExtension: 'svg',
       });
-      if (result.canceled || !result.filePath) return { saved: false };
-
-      const filePath = path.extname(result.filePath).toLowerCase() === '.svg'
-        ? result.filePath
-        : result.filePath + '.svg';
-
-      await writeFile(filePath, svgContent, 'utf8');
+      if (!result.saved || !result.path) return { saved: false };
 
       let logId: number | undefined;
       if (meta?.planName) {
@@ -237,15 +223,15 @@ export function registerExportsIpc(): void {
           exportType: meta.panel ? `svg-${meta.panel}` : 'svg',
           panel: meta.panel ?? null,
           systemName: meta.systemName ?? null,
-          filename: filePath,
-          opsecPreset: meta.opsecPreset ?? null
+          filename: result.path,
+          opsecPreset: meta.opsecPreset ?? null,
         });
       }
-      return { saved: true, path: filePath, logId };
+      return { saved: true, path: result.path, logId };
     }
   );
 
-  ipcMain.handle('exports.list', (_, planId: number | null): ExportLogEntry[] => {
+  register('exports.list', (planId: number | null): ExportLogEntry[] => {
     const rows = (planId == null
       ? getDb()
           .prepare(
@@ -280,15 +266,15 @@ export function registerExportsIpc(): void {
       systemName: r.system_name,
       filename: r.filename,
       opsecPreset: r.opsec_preset,
-      exportedAt: r.exported_at
+      exportedAt: r.exported_at,
     }));
   });
 
-  ipcMain.handle('exports.deleteLog', (_, id: number): void => {
+  register('exports.deleteLog', (id: number): void => {
     getDb().prepare('DELETE FROM export_log WHERE id = ?').run(id);
   });
 
-  ipcMain.handle('exports.getConfig', (): Record<string, string> => {
+  register('exports.getConfig', (): Record<string, string> => {
     const rows = getDb()
       .prepare('SELECT key, value FROM export_config')
       .all() as Array<{ key: string; value: string }>;
@@ -297,7 +283,7 @@ export function registerExportsIpc(): void {
     return out;
   });
 
-  ipcMain.handle('exports.setConfig', (_, key: string, value: string): void => {
+  register('exports.setConfig', (key: string, value: string): void => {
     getDb()
       .prepare(
         `INSERT INTO export_config (key, value) VALUES (?, ?)
@@ -306,7 +292,7 @@ export function registerExportsIpc(): void {
       .run(key, value);
   });
 
-  ipcMain.handle(
+  register(
     'exports.listOpsecPresets',
     (): Array<{ name: string; flags: Record<string, boolean>; updatedAt: string }> => {
       const rows = getDb()
@@ -331,9 +317,9 @@ export function registerExportsIpc(): void {
     }
   );
 
-  ipcMain.handle(
+  register(
     'exports.saveOpsecPreset',
-    (_, name: string, flags: Record<string, boolean>): void => {
+    (name: string, flags: Record<string, boolean>): void => {
       if (typeof name !== 'string') throw new Error('Preset name must be a string');
       const trimmed = name.trim();
       if (trimmed.length === 0 || trimmed.length > 64) {
@@ -368,7 +354,7 @@ export function registerExportsIpc(): void {
     }
   );
 
-  ipcMain.handle('exports.deleteOpsecPreset', (_, name: string): void => {
+  register('exports.deleteOpsecPreset', (name: string): void => {
     if (typeof name !== 'string') throw new Error('Preset name must be a string');
     const trimmed = name.trim();
     const reserved = new Set(['public', 'internal', 'none', 'custom']);
@@ -378,7 +364,7 @@ export function registerExportsIpc(): void {
     getDb().prepare('DELETE FROM opsec_presets WHERE name = ?').run(trimmed);
   });
 
-  ipcMain.handle('exports.exportDna', (_, planId: number): { dna: string } => {
+  register('exports.exportDna', (planId: number): { dna: string } => {
     const { plan, data } = buildPlanDataForExport(planId);
     const dna = encodeDnaV2Binary(data);
     logExport({
@@ -388,12 +374,12 @@ export function registerExportsIpc(): void {
       panel: null,
       systemName: null,
       filename: null,
-      opsecPreset: null
+      opsecPreset: null,
     });
     return { dna };
   });
 
-  ipcMain.handle('exports.exportDnaText', (_, planId: number): { dna: string } => {
+  register('exports.exportDnaText', (planId: number): { dna: string } => {
     const { plan, data } = buildPlanDataForExport(planId);
     const dna = encodeDnaV2Text(data);
     logExport({
@@ -403,14 +389,14 @@ export function registerExportsIpc(): void {
       panel: null,
       systemName: null,
       filename: null,
-      opsecPreset: null
+      opsecPreset: null,
     });
     return { dna };
   });
 
-  ipcMain.handle(
+  register(
     'exports.importDna',
-    (_, dna: unknown): { planId: number; name: string } => {
+    (dna: unknown): { planId: number; name: string } => {
       if (typeof dna !== 'string') throw new Error('DNA must be a string.');
       if (dna.length > MAX_DNA_LENGTH) throw new Error('DNA payload exceeds size limit.');
 
@@ -565,7 +551,7 @@ export function registerExportsIpc(): void {
           panel: null,
           systemName: null,
           filename: null,
-          opsecPreset: null
+          opsecPreset: null,
         });
 
         return { planId, name };
@@ -579,9 +565,7 @@ export function registerExportsIpc(): void {
   // Moon scan export: serialise all moon_scans rows for systems in the plan's scope.
   // Format: 'ESOVMS2' + base64(deflateRaw(JSON))
   // Row tuple: [system_id, moon_id, moon_number, planet_name, ore_type, ore_percent]
-  // (ESOVMS1 was [system_id, moon_number, ore_type, ore_percent] — no longer emitted; rejected on import
-  // because it can't be safely upgraded to the moon_id-keyed schema.)
-  ipcMain.handle('exports.exportMoonScans', (_, planId: number): { data: string } => {
+  register('exports.exportMoonScans', (planId: number): { data: string } => {
     const db = getDb();
 
     type ScopeRow = { system_id: number };
@@ -618,9 +602,7 @@ export function registerExportsIpc(): void {
     return { data };
   });
 
-  // Moon scan import: parse ESOVMS2 payload and upsert into moon_scans.
-  // Creates a new import session for the batch.
-  ipcMain.handle('exports.importMoonScans', (_, raw: unknown): { systemCount: number; moonsImported: number } => {
+  register('exports.importMoonScans', (raw: unknown): { systemCount: number; moonsImported: number } => {
     if (typeof raw !== 'string') throw new Error('Moon scan data must be a string.');
     if (raw.startsWith('ESOVMS1')) {
       throw new Error('ESOVMS1 exports were created before the moon-id schema change and can no longer be imported. Please re-export from the source.');
@@ -682,9 +664,7 @@ export function registerExportsIpc(): void {
       }
     })();
 
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send('data-refreshed');
-    }
+    getHost().broadcast('data-refreshed');
 
     return { systemCount, moonsImported: moonCount };
   });
@@ -724,7 +704,7 @@ function validateDnaPayloadV1(raw: unknown): ValidatedDna {
       systemId: sysId,
       upgradeName: name,
       installed: installed as 0 | 1,
-      ordering
+      ordering,
     });
   }
 
@@ -744,7 +724,7 @@ function validateDnaPayloadV1(raw: unknown): ValidatedDna {
         status: STATUS_BY_CODE[code],
         transferAmount: amount,
         destinationSystemId: dest === 0 ? null : dest,
-        exportAllUnused: exportAll as 0 | 1
+        exportAllUnused: exportAll as 0 | 1,
       });
     }
   }

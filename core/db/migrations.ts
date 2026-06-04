@@ -1,8 +1,15 @@
-import { existsSync } from "node:fs";
-import Database from "better-sqlite3";
-import type { DB } from "./connection.js";
+import type { Db } from './Db.js';
 
-export function runMigrations(db: DB, seedPath?: string): void {
+/**
+ * Runs forward-only schema migrations on an opened user DB.
+ *
+ * `seedDb`, if provided, is a read-only handle on the bundled seed.db opened by
+ * the host. It is used to backfill columns and to re-sync seeded read-only
+ * tables (regions, constellations, systems, stars, planets, upgrades,
+ * system_adjacency). Core never imports a SQLite driver — the host must open
+ * the seed handle and pass it in.
+ */
+export function runMigrations(db: Db, seedDb?: Db): void {
     const cols = (
         db.prepare("PRAGMA table_info(plan_system_status)").all() as {
             name: string;
@@ -72,15 +79,10 @@ export function runMigrations(db: DB, seedPath?: string): void {
             )
             .get() as { n: number }
     ).n;
-    if (missingPlanetType > 0 && seedPath && existsSync(seedPath)) {
-        const seed = new Database(seedPath, { readonly: true });
-        try {
-            const rows = seed.prepare('SELECT id, planet_type FROM planets').all() as { id: number; planet_type: string | null }[];
-            const upd = db.prepare('UPDATE planets SET planet_type = ? WHERE id = ? AND planet_type IS NULL');
-            db.transaction(() => { for (const r of rows) upd.run(r.planet_type, r.id); })();
-        } finally {
-            seed.close();
-        }
+    if (missingPlanetType > 0 && seedDb) {
+        const rows = seedDb.prepare('SELECT id, planet_type FROM planets').all() as { id: number; planet_type: string | null }[];
+        const upd = db.prepare('UPDATE planets SET planet_type = ? WHERE id = ? AND planet_type IS NULL');
+        db.transaction(() => { for (const r of rows) upd.run(r.planet_type, r.id); })();
     }
 
     const regionCols = (
@@ -188,41 +190,36 @@ export function runMigrations(db: DB, seedPath?: string): void {
     // Unconditionally sync all seeded read-only tables from seed.db so that
     // re-seeding (e.g. updated SVGs, new sov data) propagates to existing user DBs
     // without requiring a manual app.db delete.
-    if (seedPath && existsSync(seedPath)) {
-        const seed = new Database(seedPath, { readonly: true });
-        try {
-            const regions = seed.prepare('SELECT id, name, faction_id, map_svg FROM regions').all();
-            const constellations = seed.prepare('SELECT id, region_id, name, faction_id FROM constellations').all();
-            const systems = seed.prepare('SELECT id, constellation_id, region_id, name, security_status, security_class, x, y, z FROM systems').all();
-            const stars = seed.prepare('SELECT id, system_id, spectral_class, description, power FROM stars').all();
-            const planets = seed.prepare('SELECT id, system_id, name, power, workforce, superionic_ice_per_hour, magmatic_gas_per_hour, planet_type FROM planets').all();
-            const upgrades = seed.prepare('SELECT name, power, workforce, superionic_ice, magmatic_gas, startup, icon FROM upgrades').all();
-            const adjacency = seed.prepare('SELECT system_id, neighbor_id FROM system_adjacency').all();
+    if (seedDb) {
+        const regions = seedDb.prepare('SELECT id, name, faction_id, map_svg FROM regions').all();
+        const constellations = seedDb.prepare('SELECT id, region_id, name, faction_id FROM constellations').all();
+        const systems = seedDb.prepare('SELECT id, constellation_id, region_id, name, security_status, security_class, x, y, z FROM systems').all();
+        const stars = seedDb.prepare('SELECT id, system_id, spectral_class, description, power FROM stars').all();
+        const planets = seedDb.prepare('SELECT id, system_id, name, power, workforce, superionic_ice_per_hour, magmatic_gas_per_hour, planet_type FROM planets').all();
+        const upgrades = seedDb.prepare('SELECT name, power, workforce, superionic_ice, magmatic_gas, startup, icon FROM upgrades').all();
+        const adjacency = seedDb.prepare('SELECT system_id, neighbor_id FROM system_adjacency').all();
 
-            db.transaction(() => {
-                const insRegion = db.prepare('INSERT OR REPLACE INTO regions (id, name, faction_id, map_svg) VALUES (@id, @name, @faction_id, @map_svg)');
-                for (const r of regions) insRegion.run(r);
+        db.transaction(() => {
+            const insRegion = db.prepare('INSERT OR REPLACE INTO regions (id, name, faction_id, map_svg) VALUES (@id, @name, @faction_id, @map_svg)');
+            for (const r of regions) insRegion.run(r);
 
-                const insConst = db.prepare('INSERT OR REPLACE INTO constellations (id, region_id, name, faction_id) VALUES (@id, @region_id, @name, @faction_id)');
-                for (const r of constellations) insConst.run(r);
+            const insConst = db.prepare('INSERT OR REPLACE INTO constellations (id, region_id, name, faction_id) VALUES (@id, @region_id, @name, @faction_id)');
+            for (const r of constellations) insConst.run(r);
 
-                const insSys = db.prepare('INSERT OR REPLACE INTO systems (id, constellation_id, region_id, name, security_status, security_class, x, y, z) VALUES (@id, @constellation_id, @region_id, @name, @security_status, @security_class, @x, @y, @z)');
-                for (const r of systems) insSys.run(r);
+            const insSys = db.prepare('INSERT OR REPLACE INTO systems (id, constellation_id, region_id, name, security_status, security_class, x, y, z) VALUES (@id, @constellation_id, @region_id, @name, @security_status, @security_class, @x, @y, @z)');
+            for (const r of systems) insSys.run(r);
 
-                const insStar = db.prepare('INSERT OR REPLACE INTO stars (id, system_id, spectral_class, description, power) VALUES (@id, @system_id, @spectral_class, @description, @power)');
-                for (const r of stars) insStar.run(r);
+            const insStar = db.prepare('INSERT OR REPLACE INTO stars (id, system_id, spectral_class, description, power) VALUES (@id, @system_id, @spectral_class, @description, @power)');
+            for (const r of stars) insStar.run(r);
 
-                const insPlanet = db.prepare('INSERT OR REPLACE INTO planets (id, system_id, name, power, workforce, superionic_ice_per_hour, magmatic_gas_per_hour, planet_type) VALUES (@id, @system_id, @name, @power, @workforce, @superionic_ice_per_hour, @magmatic_gas_per_hour, @planet_type)');
-                for (const r of planets) insPlanet.run(r);
+            const insPlanet = db.prepare('INSERT OR REPLACE INTO planets (id, system_id, name, power, workforce, superionic_ice_per_hour, magmatic_gas_per_hour, planet_type) VALUES (@id, @system_id, @name, @power, @workforce, @superionic_ice_per_hour, @magmatic_gas_per_hour, @planet_type)');
+            for (const r of planets) insPlanet.run(r);
 
-                const insUpgrade = db.prepare('INSERT OR REPLACE INTO upgrades (name, power, workforce, superionic_ice, magmatic_gas, startup, icon) VALUES (@name, @power, @workforce, @superionic_ice, @magmatic_gas, @startup, @icon)');
-                for (const r of upgrades) insUpgrade.run(r);
+            const insUpgrade = db.prepare('INSERT OR REPLACE INTO upgrades (name, power, workforce, superionic_ice, magmatic_gas, startup, icon) VALUES (@name, @power, @workforce, @superionic_ice, @magmatic_gas, @startup, @icon)');
+            for (const r of upgrades) insUpgrade.run(r);
 
-                const insAdj = db.prepare('INSERT OR REPLACE INTO system_adjacency (system_id, neighbor_id) VALUES (@system_id, @neighbor_id)');
-                for (const r of adjacency) insAdj.run(r);
-            })();
-        } finally {
-            seed.close();
-        }
+            const insAdj = db.prepare('INSERT OR REPLACE INTO system_adjacency (system_id, neighbor_id) VALUES (@system_id, @neighbor_id)');
+            for (const r of adjacency) insAdj.run(r);
+        })();
     }
 }
