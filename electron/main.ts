@@ -2,9 +2,11 @@ import { app, BrowserWindow, shell } from 'electron';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setHost } from '@core/host.js';
+import { electronHost } from './host/electronHost.js';
 import { registerIpc } from './ipc/index.js';
 import { closeDb, getDb } from './db/userDb.js';
-import { getMarketSyncStatus, runMarketSync } from './ipc/marketSync.js';
+import { getMarketSyncStatus, runMarketSync } from '@core/handlers/marketSync.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -45,6 +47,8 @@ function createMainWindow(): BrowserWindow {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.evesov.tool');
+
+  setHost(electronHost);
 
   let raisingSiblings = false;
   app.on('browser-window-created', (_, window) => {

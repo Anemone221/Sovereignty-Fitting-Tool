@@ -1,4 +1,4 @@
-import type { DB } from '../db/connection.js';
+import type { Db } from './db/Db.js';
 
 export interface PathResult {
   found: boolean;
@@ -10,7 +10,7 @@ export interface PathResult {
  * BFS up to 3 hops between sourceId and destId using system_adjacency.
  * Returns the shortest path found, or found=false if distance exceeds 3 hops.
  */
-export function findPath(db: DB, sourceId: number, destId: number): PathResult {
+export function findPath(db: Db, sourceId: number, destId: number): PathResult {
   if (sourceId === destId) return { found: true, hops: 0, intermediates: [] };
 
   const getNeighbors = db.prepare(
@@ -51,7 +51,7 @@ export function findPath(db: DB, sourceId: number, destId: number): PathResult {
  * excluding the source itself. Used to populate the destination dropdown.
  */
 export function reachableSystems(
-  db: DB,
+  db: Db,
   sourceId: number,
   maxHops: number = 3
 ): number[] {

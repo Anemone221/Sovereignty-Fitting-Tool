@@ -1,3 +1,4 @@
-import type { EveSovApi } from '@shared/index';
+import type { Backend } from './backend';
+import { selectBackend } from './backend';
 
-export const evesov: EveSovApi = window.evesov;
+export const evesov: Backend = selectBackend();

@@ -1,6 +1,6 @@
-import { ipcMain } from 'electron';
-import { getDb } from '../db/userDb.js';
-import { getCurrentPriceField, hasMarketData, lookupPrice } from './profitability.js';
+import { register } from '../registerCore.js';
+import { getDb } from '../db/Db.js';
+import { getCurrentPriceField, hasMarketData, lookupPrice } from '../market/profitability.js';
 import { purgeMarketData } from './marketSync.js';
 import type {
   Constellation,
@@ -128,8 +128,8 @@ const toBudget = (b: BudgetDbRow): SystemBudget => ({
   sovEligible: b.sov_eligible === 1
 });
 
-export function registerDataIpc(): void {
-  ipcMain.handle('data.tree', () => {
+export function registerDataHandlers(): void {
+  register('data.tree', () => {
     const db = getDb();
     const regions = db.prepare('SELECT id, name FROM regions ORDER BY name').all() as Pick<RegionDbRow, 'id' | 'name'>[];
     const constellations = db
@@ -182,17 +182,17 @@ export function registerDataIpc(): void {
     return tree;
   });
 
-  ipcMain.handle('data.region', (_, id: number): Region | null => {
+  register('data.region', (id: number): Region | null => {
     const row = getDb().prepare('SELECT * FROM regions WHERE id = ?').get(id) as RegionDbRow | undefined;
     return row ? toRegion(row) : null;
   });
 
-  ipcMain.handle('data.constellation', (_, id: number): Constellation | null => {
+  register('data.constellation', (id: number): Constellation | null => {
     const row = getDb().prepare('SELECT * FROM constellations WHERE id = ?').get(id) as ConstellationDbRow | undefined;
     return row ? toConstellation(row) : null;
   });
 
-  ipcMain.handle('data.system', (_, id: number): SystemDetail | null => {
+  register('data.system', (id: number): SystemDetail | null => {
     const db = getDb();
     const sysRow = db.prepare('SELECT * FROM systems WHERE id = ?').get(id) as SystemDbRow | undefined;
     if (!sysRow) return null;
@@ -218,27 +218,27 @@ export function registerDataIpc(): void {
     };
   });
 
-  ipcMain.handle('data.upgrades', (): Upgrade[] => {
+  register('data.upgrades', (): Upgrade[] => {
     const rows = getDb().prepare('SELECT * FROM upgrades ORDER BY name').all() as UpgradeDbRow[];
     return rows.map(toUpgrade);
   });
 
-  ipcMain.handle('data.upgrade', (_, name: string): Upgrade | null => {
+  register('data.upgrade', (name: string): Upgrade | null => {
     const row = getDb().prepare('SELECT * FROM upgrades WHERE name = ?').get(name) as UpgradeDbRow | undefined;
     return row ? toUpgrade(row) : null;
   });
 
-  ipcMain.handle('data.hasMarketData', (): boolean => {
+  register('data.hasMarketData', (): boolean => {
     return hasMarketData(getDb());
   });
 
-  ipcMain.handle('data.purgeMarketData', (): void => {
+  register('data.purgeMarketData', (): void => {
     purgeMarketData();
   });
 
-  ipcMain.handle(
+  register(
     'data.priceFor',
-    (_, typeId: number): { price: number; asOf: string; field: string } | null => {
+    (typeId: number): { price: number; asOf: string; field: string } | null => {
       const db = getDb();
       const field = getCurrentPriceField(db);
       const result = lookupPrice(db, typeId, field);

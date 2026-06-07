@@ -3,6 +3,8 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { is } from '@electron-toolkit/utils';
 import { fileURLToPath } from 'node:url';
+import type { Db } from '@core/db/Db.js';
+import { setDb as coreSetDb, clearDb as coreClearDb } from '@core/db/Db.js';
 import { openDatabase, type DB } from './connection.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -20,8 +22,15 @@ function resolveUserDbPath(): string {
   return join(app.getPath('userData'), 'app.db');
 }
 
-export function getDb(): DB {
-  if (cached) return cached;
+// better-sqlite3's Database structurally satisfies the core Db interface; the
+// cast is contained here so the rest of the Electron host can treat the handle
+// as a plain Db throughout.
+function asCoreDb(db: DB): Db {
+  return db as unknown as Db;
+}
+
+export function getDb(): Db {
+  if (cached) return asCoreDb(cached);
   const target = resolveUserDbPath();
   const seed = resolveSeedPath();
   if (!existsSync(target)) {
@@ -34,12 +43,15 @@ export function getDb(): DB {
     console.log(`[db] copied seed → ${target}`);
   }
   cached = openDatabase(target, existsSync(seed) ? seed : undefined);
-  return cached;
+  const view = asCoreDb(cached);
+  coreSetDb(view);
+  return view;
 }
 
 export function closeDb(): void {
   if (cached) {
     cached.close();
     cached = null;
+    coreClearDb();
   }
 }

@@ -1,6 +1,7 @@
-import { BrowserWindow, ipcMain } from 'electron';
-import { getDb } from '../db/userDb.js';
-import { findPath, reachableSystems } from './adjacency.js';
+import { register } from '../registerCore.js';
+import { getDb, type Db } from '../db/Db.js';
+import { getHost } from '../host.js';
+import { findPath, reachableSystems } from '../adjacency.js';
 import { upgradeTypeKey, upgradeTypeLabel } from '@shared/upgradeTypes';
 import type {
   AlnLink,
@@ -126,7 +127,7 @@ function regionsByPlan(): Map<number, string[]> {
   return map;
 }
 
-function assertWritable(db: ReturnType<typeof import('../db/userDb.js').getDb>, planId: number): void {
+function assertWritable(db: Db, planId: number): void {
   const row = db.prepare('SELECT read_only FROM plans WHERE id = ?').get(planId) as { read_only: number } | undefined;
   if (row?.read_only === 1) throw new Error('Plan is read-only');
 }
@@ -321,13 +322,11 @@ const BALANCE_SQL_FOR_PLAN = `
 `;
 
 function broadcastPlanChanged(planId: number): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send('plan-changed', { planId });
-  }
+  getHost().broadcast('plan-changed', { planId });
 }
 
-export function registerPlansIpc(): void {
-  ipcMain.handle('plans.list', (): PlanSummary[] => {
+export function registerPlansHandlers(): void {
+  register('plans.list', (): PlanSummary[] => {
     const rows = getDb()
       .prepare('SELECT * FROM plans ORDER BY updated_at DESC')
       .all() as PlanDbRow[];
@@ -335,7 +334,7 @@ export function registerPlansIpc(): void {
     return rows.map((r) => toPlanSummary(r, regions.get(r.id) ?? []));
   });
 
-  ipcMain.handle(
+  register(
     'plans.get',
     (
       _,
@@ -367,7 +366,7 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle('plans.getSystemIds', (_, planId: number): number[] => {
+  register('plans.getSystemIds', (planId: number): number[] => {
     const rows = getDb()
       .prepare(
         `SELECT DISTINCT s.id AS id FROM systems s
@@ -381,9 +380,9 @@ export function registerPlansIpc(): void {
     return rows.map((r) => r.id);
   });
 
-  ipcMain.handle(
+  register(
     'plans.setCapital',
-    (_, planId: number, systemId: number, isCapital: boolean): void => {
+    (planId: number, systemId: number, isCapital: boolean): void => {
       const db = getDb();
       assertWritable(db, planId);
       db.transaction(() => {
@@ -406,7 +405,7 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle('plans.create', (_, name: string): PlanSummary => {
+  register('plans.create', (name: string): PlanSummary => {
     const db = getDb();
     const now = new Date().toISOString();
     const result = db
@@ -417,7 +416,7 @@ export function registerPlansIpc(): void {
     return toPlanSummary(row, regionsForPlan(newId));
   });
 
-  ipcMain.handle('plans.rename', (_, id: number, name: string): PlanSummary => {
+  register('plans.rename', (id: number, name: string): PlanSummary => {
     const now = new Date().toISOString();
     getDb()
       .prepare('UPDATE plans SET name = ?, updated_at = ? WHERE id = ?')
@@ -426,7 +425,7 @@ export function registerPlansIpc(): void {
     return toPlanSummary(row, regionsForPlan(id));
   });
 
-  ipcMain.handle('plans.setReadOnly', (_, id: number, readOnly: boolean): PlanSummary => {
+  register('plans.setReadOnly', (id: number, readOnly: boolean): PlanSummary => {
     const db = getDb();
     db.prepare('UPDATE plans SET read_only = ?, updated_at = ? WHERE id = ?')
       .run(readOnly ? 1 : 0, new Date().toISOString(), id);
@@ -434,12 +433,12 @@ export function registerPlansIpc(): void {
     return toPlanSummary(row, regionsForPlan(id));
   });
 
-  ipcMain.handle('plans.delete', (_, id: number): void => {
+  register('plans.delete', (id: number): void => {
     getDb().prepare('DELETE FROM plans WHERE id = ?').run(id);
     broadcastPlanChanged(id);
   });
 
-  ipcMain.handle('plans.duplicate', (_, sourceId: number, newName: string): PlanSummary => {
+  register('plans.duplicate', (sourceId: number, newName: string): PlanSummary => {
     const db = getDb();
     const trimmed = newName.trim();
     if (!trimmed) throw new Error('plan name is required');
@@ -467,7 +466,7 @@ export function registerPlansIpc(): void {
     return toPlanSummary(row, regionsForPlan(createdId));
   });
 
-  ipcMain.handle('plans.setScopes', (_, planId: number, scopes: PlanScope[]): void => {
+  register('plans.setScopes', (planId: number, scopes: PlanScope[]): void => {
     const db = getDb();
     assertWritable(db, planId);
     const previous = db
@@ -527,9 +526,9 @@ export function registerPlansIpc(): void {
     broadcastPlanChanged(planId);
   });
 
-  ipcMain.handle(
+  register(
     'plans.assignUpgrade',
-    (_, planId: number, systemId: number, upgradeName: string): AssignResult => {
+    (planId: number, systemId: number, upgradeName: string): AssignResult => {
       const db = getDb();
       assertWritable(db, planId);
 
@@ -574,9 +573,9 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle(
+  register(
     'plans.removeUpgrade',
-    (_, planId: number, systemId: number, upgradeName: string): void => {
+    (planId: number, systemId: number, upgradeName: string): void => {
       const db = getDb();
       assertWritable(db, planId);
       db.transaction(() => {
@@ -594,7 +593,7 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle(
+  register(
     'plans.explodeScope',
     (
       _,
@@ -650,7 +649,7 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle('plans.removeSystem', (_, planId: number, systemId: number): void => {
+  register('plans.removeSystem', (planId: number, systemId: number): void => {
     const db = getDb();
     assertWritable(db, planId);
     const sys = db
@@ -722,9 +721,9 @@ export function registerPlansIpc(): void {
     broadcastPlanChanged(planId);
   });
 
-  ipcMain.handle(
+  register(
     'plans.setUpgradeInstalled',
-    (_, planId: number, systemId: number, upgradeName: string, installed: boolean): void => {
+    (planId: number, systemId: number, upgradeName: string, installed: boolean): void => {
       const db = getDb();
       assertWritable(db, planId);
       db.transaction(() => {
@@ -738,9 +737,9 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle(
+  register(
     'plans.setAllUpgradesInstalled',
-    (_, planId: number, installed: boolean): void => {
+    (planId: number, installed: boolean): void => {
       const db = getDb();
       assertWritable(db, planId);
       db.transaction(() => {
@@ -753,9 +752,9 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle(
+  register(
     'plans.clearUpgrades',
-    (_, planId: number, scope: ClearUpgradesScope): void => {
+    (planId: number, scope: ClearUpgradesScope): void => {
       const db = getDb();
       assertWritable(db, planId);
       db.transaction(() => {
@@ -786,9 +785,9 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle(
+  register(
     'plans.systemBalance',
-    (_, planId: number, systemId: number): SystemBalance | null => {
+    (planId: number, systemId: number): SystemBalance | null => {
       const row = getDb()
         .prepare(BALANCE_SQL_BY_SYSTEM)
         .get({ planId, systemId }) as BalanceDbRow | undefined;
@@ -796,9 +795,9 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle(
+  register(
     'plans.setSystemStatus',
-    (_, planId: number, systemId: number, status: SystemStatus): void => {
+    (planId: number, systemId: number, status: SystemStatus): void => {
       const db = getDb();
       assertWritable(db, planId);
       db.transaction(() => {
@@ -823,7 +822,7 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle('plans.summary', (_, planId: number): PlanRollup => {
+  register('plans.summary', (planId: number): PlanRollup => {
     const db = getDb();
     const rows = db
       .prepare(BALANCE_SQL_FOR_PLAN)
@@ -869,7 +868,7 @@ export function registerPlansIpc(): void {
     };
   });
 
-  ipcMain.handle('plans.matrix', (_, planId: number): PlanMatrix => {
+  register('plans.matrix', (planId: number): PlanMatrix => {
     const db = getDb();
     const sysRows = db
       .prepare(
@@ -983,7 +982,7 @@ export function registerPlansIpc(): void {
     return { systems };
   });
 
-  ipcMain.handle(
+  register(
     'plans.setWorkforceTransfer',
     (
       _,
@@ -1055,9 +1054,9 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle(
+  register(
     'plans.removeWorkforceTransfer',
-    (_, planId: number, sourceSystemId: number): void => {
+    (planId: number, sourceSystemId: number): void => {
       const db = getDb();
       assertWritable(db, planId);
       db.transaction(() => {
@@ -1072,9 +1071,9 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle(
+  register(
     'plans.getWorkforceTransfers',
-    (_, planId: number): WorkforceTransfer[] => {
+    (planId: number): WorkforceTransfer[] => {
       const rows = getDb()
         .prepare(
           `SELECT
@@ -1105,9 +1104,9 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle(
+  register(
     'plans.getReachableImportSystems',
-    (_, planId: number, sourceSystemId: number): { systemId: number; systemName: string }[] => {
+    (planId: number, sourceSystemId: number): { systemId: number; systemName: string }[] => {
       const db = getDb();
       const reachable = reachableSystems(db, sourceSystemId, 3);
       if (reachable.length === 0) return [];
@@ -1129,9 +1128,9 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle(
+  register(
     'plans.getAlnTargets',
-    (_, planId: number, systemId: number): { targets: AlnTarget[]; currentLink: AlnLink | null } => {
+    (planId: number, systemId: number): { targets: AlnTarget[]; currentLink: AlnLink | null } => {
       const db = getDb();
       const src = db.prepare('SELECT x, y, z FROM systems WHERE id = ?').get(systemId) as
         | { x: number | null; y: number | null; z: number | null }
@@ -1173,7 +1172,7 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle(
+  register(
     'plans.setAlnLink',
     (
       _,
@@ -1230,7 +1229,7 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle('plans.removeAlnLink', (_, planId: number, systemId: number): void => {
+  register('plans.removeAlnLink', (planId: number, systemId: number): void => {
     const db = getDb();
     assertWritable(db, planId);
     db.transaction(() => {
@@ -1251,9 +1250,9 @@ export function registerPlansIpc(): void {
     broadcastPlanChanged(planId);
   });
 
-  ipcMain.handle(
+  register(
     'plans.searchSystems',
-    (_, query: string): { systemId: number; systemName: string }[] => {
+    (query: string): { systemId: number; systemName: string }[] => {
       const rows = getDb()
         .prepare('SELECT id, name FROM systems WHERE name LIKE ? LIMIT 50')
         .all(`%${query}%`) as { id: number; name: string }[];
@@ -1261,7 +1260,7 @@ export function registerPlansIpc(): void {
     }
   );
 
-  ipcMain.handle('plans.audit', (_, planId: number): PlanAuditResult => {
+  register('plans.audit', (planId: number): PlanAuditResult => {
     const db = getDb();
 
     // Fetch all systems in the plan with their balance and upgrade list.
@@ -1366,9 +1365,9 @@ export function registerPlansIpc(): void {
     return { planId, findings };
   });
 
-  ipcMain.handle(
+  register(
     'plans.importCsv',
-    (_, planName: string, csvText: string): { planId: number; systemsImported: number; warnings: string[] } => {
+    (planName: string, csvText: string): { planId: number; systemsImported: number; warnings: string[] } => {
       const db = getDb();
       const warnings: string[] = [];
 

@@ -9,6 +9,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "noEmit": true,
     "allowSyntheticDefaultImports": true,
     "types": ["node"],
     "composite": true,
@@ -18,5 +19,5 @@
       "@core/*": ["core/*"]
     }
   },
-  "include": ["electron/**/*.ts", "electron.vite.config.ts", "src/types/**/*.ts", "core/**/*.ts"]
+  "include": ["core/**/*.ts", "src/types/**/*.ts"]
 }

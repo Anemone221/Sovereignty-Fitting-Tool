@@ -1,9 +1,7 @@
-import { BrowserWindow, ipcMain, net } from 'electron';
-import { PassThrough } from 'node:stream';
-import { createInterface } from 'node:readline';
-import unbzip2Stream from 'unbzip2-stream';
-import { getDb } from '../db/userDb.js';
-import { allTrackedTypeIds, FORGE_REGION_ID } from './marketTypes.js';
+import { register } from '../registerCore.js';
+import { getDb } from '../db/Db.js';
+import { getHost } from '../host.js';
+import { allTrackedTypeIds, FORGE_REGION_ID } from '../market/marketTypes.js';
 
 const TRACKED = new Set<number>(allTrackedTypeIds());
 const MAX_DAYS_BACK = 30;
@@ -37,8 +35,6 @@ function isoDate(d: Date): string {
 }
 
 function targetDates(): string[] {
-  // The latest dump covers the previous UTC day. Generate the last
-  // MAX_DAYS_BACK completed dates in oldest-first order.
   const dates: string[] = [];
   const today = new Date();
   for (let i = MAX_DAYS_BACK; i >= 1; i--) {
@@ -113,48 +109,23 @@ function parseLine(line: string, ix: ColumnIndex): ParsedRow | null {
   };
 }
 
-function fetchAndParse(url: string): Promise<{ status: number; rows: ParsedRow[] }> {
-  return new Promise((resolve, reject) => {
-    const req = net.request({ method: 'GET', url, redirect: 'follow' });
-    req.on('response', (response) => {
-      const status = response.statusCode;
-      if (status !== 200) {
-        // Drain to release the socket.
-        response.on('data', () => {});
-        response.on('end', () => resolve({ status, rows: [] }));
-        return;
+function parseCsv(text: string): ParsedRow[] {
+  const rows: ParsedRow[] = [];
+  const lines = text.split(/\r?\n/);
+  let ix: ColumnIndex | null = null;
+  for (const line of lines) {
+    if (ix === null) {
+      ix = parseHeader(line);
+      if (ix === null) {
+        // No usable header found; bail rather than mis-parse the body.
+        return [];
       }
-      const rows: ParsedRow[] = [];
-      // electron's IncomingMessage emits Buffer chunks via 'data' but isn't
-      // a full Readable; pipe through a PassThrough so unbzip2-stream gets
-      // a proper Node stream.
-      const passthrough = new PassThrough();
-      response.on('data', (chunk: Buffer) => passthrough.write(chunk));
-      response.on('end', () => passthrough.end());
-      response.on('error', (err) => passthrough.destroy(err));
-      const decompressed = passthrough.pipe(unbzip2Stream());
-      const rl = createInterface({ input: decompressed, crlfDelay: Infinity });
-      let ix: ColumnIndex | null = null;
-      rl.on('line', (line) => {
-        if (ix === null) {
-          ix = parseHeader(line);
-          return;
-        }
-        const row = parseLine(line, ix);
-        if (row) rows.push(row);
-      });
-      rl.on('close', () => resolve({ status, rows }));
-      decompressed.on('error', reject);
-    });
-    req.on('error', reject);
-    req.end();
-  });
-}
-
-function broadcastDataRefreshed(): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send('data-refreshed', { source: 'marketSync' });
+      continue;
+    }
+    const row = parseLine(line, ix);
+    if (row) rows.push(row);
   }
+  return rows;
 }
 
 function readSyncedDates(): Set<string> {
@@ -162,50 +133,6 @@ function readSyncedDates(): Set<string> {
     .prepare(`SELECT date FROM market_sync_log WHERE status = 'ok'`)
     .all() as { date: string }[];
   return new Set(rows.map((r) => r.date));
-}
-
-export async function runMarketSync(): Promise<MarketSyncResult> {
-  const dates = targetDates();
-  const synced = readSyncedDates();
-  const pending = dates.filter((d) => !synced.has(d));
-  const result: MarketSyncResult = {
-    daysFetched: 0,
-    rowsImported: 0,
-    errors: [],
-    days: [],
-  };
-
-  for (const date of pending) {
-    const url = dumpUrl(date);
-    try {
-      const { status, rows } = await fetchAndParse(url);
-      if (status === 404) {
-        recordDay(date, 0, 'missing');
-        result.days.push({ date, status: 'missing', rowCount: 0 });
-        continue;
-      }
-      if (status !== 200) {
-        const err = `HTTP ${status}`;
-        recordDay(date, 0, 'error');
-        result.errors.push(`${date}: ${err}`);
-        result.days.push({ date, status: 'error', rowCount: 0, error: err });
-        continue;
-      }
-      insertRows(rows);
-      recordDay(date, rows.length, 'ok');
-      result.daysFetched += 1;
-      result.rowsImported += rows.length;
-      result.days.push({ date, status: 'ok', rowCount: rows.length });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      recordDay(date, 0, 'error');
-      result.errors.push(`${date}: ${message}`);
-      result.days.push({ date, status: 'error', rowCount: 0, error: message });
-    }
-  }
-
-  if (result.daysFetched > 0) broadcastDataRefreshed();
-  return result;
 }
 
 function insertRows(rows: ParsedRow[]): void {
@@ -241,6 +168,53 @@ function recordDay(date: string, rowCount: number, status: 'ok' | 'missing' | 'e
     .run(date, new Date().toISOString(), rowCount, status);
 }
 
+export async function runMarketSync(): Promise<MarketSyncResult> {
+  const dates = targetDates();
+  const synced = readSyncedDates();
+  const pending = dates.filter((d) => !synced.has(d));
+  const result: MarketSyncResult = {
+    daysFetched: 0,
+    rowsImported: 0,
+    errors: [],
+    days: [],
+  };
+
+  const host = getHost();
+
+  for (const date of pending) {
+    const url = dumpUrl(date);
+    try {
+      const fetched = await host.fetchMarketCsv(url);
+      if (fetched.status === 404) {
+        recordDay(date, 0, 'missing');
+        result.days.push({ date, status: 'missing', rowCount: 0 });
+        continue;
+      }
+      if (fetched.status !== 200 || !fetched.text) {
+        const err = `HTTP ${fetched.status}`;
+        recordDay(date, 0, 'error');
+        result.errors.push(`${date}: ${err}`);
+        result.days.push({ date, status: 'error', rowCount: 0, error: err });
+        continue;
+      }
+      const rows = parseCsv(fetched.text);
+      insertRows(rows);
+      recordDay(date, rows.length, 'ok');
+      result.daysFetched += 1;
+      result.rowsImported += rows.length;
+      result.days.push({ date, status: 'ok', rowCount: rows.length });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      recordDay(date, 0, 'error');
+      result.errors.push(`${date}: ${message}`);
+      result.days.push({ date, status: 'error', rowCount: 0, error: message });
+    }
+  }
+
+  if (result.daysFetched > 0) host.broadcast('data-refreshed', { source: 'marketSync' });
+  return result;
+}
+
 export function getMarketSyncStatus(): MarketSyncStatus {
   const db = getDb();
   const last = db
@@ -267,14 +241,10 @@ export function purgeMarketData(): void {
     db.prepare('DELETE FROM market_history').run();
     db.prepare('DELETE FROM market_sync_log').run();
   })();
-  broadcastDataRefreshed();
+  getHost().broadcast('data-refreshed', { source: 'marketSync' });
 }
 
-export function registerMarketSyncIpc(): void {
-  ipcMain.handle('marketSync.run', async (): Promise<MarketSyncResult> => {
-    return runMarketSync();
-  });
-  ipcMain.handle('marketSync.status', (): MarketSyncStatus => {
-    return getMarketSyncStatus();
-  });
+export function registerMarketSyncHandlers(): void {
+  register('marketSync.run', async (): Promise<MarketSyncResult> => runMarketSync());
+  register('marketSync.status', (): MarketSyncStatus => getMarketSyncStatus());
 }
