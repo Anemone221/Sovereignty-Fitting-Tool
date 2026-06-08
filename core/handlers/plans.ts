@@ -337,7 +337,6 @@ export function registerPlansHandlers(): void {
   register(
     'plans.get',
     (
-      _,
       id: number
     ): {
       plan: PlanSummary;
@@ -596,7 +595,6 @@ export function registerPlansHandlers(): void {
   register(
     'plans.explodeScope',
     (
-      _,
       planId: number,
       scopeType: 'region' | 'constellation',
       scopeId: number
@@ -985,7 +983,6 @@ export function registerPlansHandlers(): void {
   register(
     'plans.setWorkforceTransfer',
     (
-      _,
       planId: number,
       sourceSystemId: number,
       destSystemId: number,
@@ -1175,7 +1172,6 @@ export function registerPlansHandlers(): void {
   register(
     'plans.setAlnLink',
     (
-      _,
       planId: number,
       systemId: number,
       linkedSystemId: number | null,
