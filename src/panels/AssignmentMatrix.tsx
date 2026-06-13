@@ -37,6 +37,21 @@ const FMT_LABELS: Record<FmtKey, string> = {
 
 const FMT_PREF_PREFIX = "matrix.fmt.";
 
+// Matches "<Mineral> Prospecting Array <tier>" so the matrix can group these
+// columns by tier (all 1s, then 2s, then 3s) rather than per-mineral.
+const PROSPECTING_COL_RE = /^(.+) Prospecting Array ([123])$/;
+
+// Within a tier, order minerals by EVE refined value (not alphabetically).
+const MINERAL_ORDER = [
+    "Tritanium",
+    "Pyerite",
+    "Mexallon",
+    "Isogen",
+    "Nocxium",
+    "Zydrine",
+    "Megacyte",
+];
+
 export function AssignmentMatrix() {
     const activePlanId = useUi((s) => s.activePlanId);
     const selectSystem = useUi((s) => s.selectSystem);
@@ -133,6 +148,13 @@ export function AssignmentMatrix() {
             const ai = CATEGORY_ORDER.indexOf(categoryOf(a));
             const bi = CATEGORY_ORDER.indexOf(categoryOf(b));
             if (ai !== bi) return ai - bi;
+            const pa = a.match(PROSPECTING_COL_RE);
+            const pb = b.match(PROSPECTING_COL_RE);
+            if (pa && pb)
+                return (
+                    pa[2].localeCompare(pb[2]) ||
+                    MINERAL_ORDER.indexOf(pa[1]) - MINERAL_ORDER.indexOf(pb[1])
+                );
             return a.localeCompare(b);
         });
     }, [allUpgrades, fmt.hideUnused, totals]);
