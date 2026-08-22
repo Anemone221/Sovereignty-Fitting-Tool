@@ -516,6 +516,11 @@ export interface EveSovApi {
             svgContent: string,
             meta?: CapturePngMeta,
         ) => Promise<{ saved: boolean; path?: string; logId?: number }>;
+        captureText: (
+            filename: string,
+            text: string,
+            meta?: CapturePngMeta,
+        ) => Promise<{ saved: boolean; path?: string; logId?: number }>;
         list: (planId?: number | null) => Promise<ExportLogEntry[]>;
         deleteLog: (id: number) => Promise<void>;
         getConfig: () => Promise<Record<string, string>>;

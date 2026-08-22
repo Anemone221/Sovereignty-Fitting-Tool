@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        # Advisory: 14 pre-existing violations (no-explicit-any in core/db,
+        # no-useless-assignment in three panels). Drop continue-on-error once
+        # they're cleared — until then a blocking lint would stop every release.
+        continue-on-error: true
+        run: npx eslint .
+
+      - name: Build web bundle
+        run: npm run build:web
+
+  notify-desktop:
+    # The desktop wrapper consumes this repo as its `react` submodule, so a push
+    # here changes nothing downstream until that pointer moves. Tell the wrapper
+    # to re-pin and rebuild — but only for verified pushes to the canonical repo.
+    needs: verify
+    if: github.event_name != 'pull_request' && github.repository == 'Anemone221/Sovereignty-Fitting-Tool'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch react-updated to Sov-Fitting-Tool-Desktop
+        env:
+          # Cross-repo dispatch is out of reach for GITHUB_TOKEN; this is a PAT
+          # with Contents: read-write on the wrapper repo.
+          GH_TOKEN: ${{ secrets.DESKTOP_DISPATCH_TOKEN }}
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref_name }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::DESKTOP_DISPATCH_TOKEN is not set — desktop rebuild not triggered."
+            exit 0
+          fi
+          gh api --method POST repos/Anemone221/Sov-Fitting-Tool-Desktop/dispatches --input - <<JSON
+          { "event_type": "react-updated",
+            "client_payload": { "sha": "$SHA", "ref": "$REF" } }
+          JSON

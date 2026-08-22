@@ -1558,6 +1558,12 @@ body[data-opsec-map-icons="1"] #evesov-overlay image { display: none !important;
 .exports__dna-message--err { background: rgba(248, 81, 73, 0.1); color: var(--danger); border: 1px solid var(--danger); }
 .exports__dna-hint { color: var(--fg-dim); font-size: 11px; margin: 0; }
 .exports__dna-hint code { background: var(--bg-elev-2); padding: 1px 4px; border-radius: 3px; }
+.exports__wiki-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 12px; margin-bottom: 8px; }
+.exports__wiki-row { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+.exports__wiki-message { padding: 6px 8px; border-radius: 4px; font-size: 12px; margin-bottom: 8px; }
+.exports__wiki-message--ok { background: rgba(63, 185, 80, 0.1); color: var(--ok); border: 1px solid var(--ok); }
+.exports__wiki-message--err { background: rgba(248, 81, 73, 0.1); color: var(--danger); border: 1px solid var(--danger); }
+.exports__wiki-preview { max-height: 320px; overflow: auto; background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 4px; padding: 8px; font-size: 11px; line-height: 1.45; white-space: pre; margin: 0 0 8px; }
 
 .detail__planet-icon {
     width: 16px;

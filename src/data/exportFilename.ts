@@ -1,11 +1,18 @@
-export type ExportPanel = 'matrix' | 'sites' | 'regionMap' | 'systemDetail' | 'inspector';
+export type ExportPanel =
+  | 'matrix'
+  | 'sites'
+  | 'regionMap'
+  | 'systemDetail'
+  | 'inspector'
+  | 'wiki';
 
 const PANEL_LABELS: Record<ExportPanel, string> = {
   matrix: 'Matrix',
   sites: 'Sites',
   regionMap: 'RegionMap',
   systemDetail: 'System',
-  inspector: 'Inspector'
+  inspector: 'Inspector',
+  wiki: 'Wiki'
 };
 
 function sanitise(part: string): string {
@@ -25,7 +32,7 @@ export function buildExportFilename(args: {
   panel: ExportPanel;
   systemName?: string | null;
   date?: Date;
-  ext?: 'png' | 'svg';
+  ext?: 'png' | 'svg' | 'txt';
 }): string {
   const parts = [
     sanitise(args.planName || 'Plan'),

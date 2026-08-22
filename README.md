@@ -5,7 +5,8 @@ A local desktop tool for planning EVE Online sovereignty (sov) upgrades.
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL_3.0-blue.svg)](LICENSE)
 ![Status: Beta](https://img.shields.io/badge/Status-Beta-blue.svg)
 ![Platform: Windows · macOS · Linux](https://img.shields.io/badge/Platform-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-lightgrey.svg)
-[![Build / Beta](https://github.com/unkwntech/eveSovTool/actions/workflows/build_beta.yml/badge.svg)](https://github.com/unkwntech/eveSovTool/actions/workflows/build_beta.yml)
+[![CI](https://github.com/Anemone221/Sovereignty-Fitting-Tool/actions/workflows/ci.yml/badge.svg)](https://github.com/Anemone221/Sovereignty-Fitting-Tool/actions/workflows/ci.yml)
+[![Build](https://github.com/Anemone221/Sov-Fitting-Tool-Desktop/actions/workflows/build.yml/badge.svg)](https://github.com/Anemone221/Sov-Fitting-Tool-Desktop/actions/workflows/build.yml)
 
 ---
 
@@ -17,7 +18,7 @@ Pick any combination of regions, constellations, and systems, drop upgrades onto
 
 ## Installing
 
-Pre-built installers for Windows, macOS, and Linux are published as artifacts on the [Build / Beta](https://github.com/unkwntech/eveSovTool/actions/workflows/build_beta.yml) workflow (every push to `main`) and on tagged releases.
+Pre-built installers for Windows, macOS, and Linux are published as [releases on the desktop wrapper repo](https://github.com/Anemone221/Sov-Fitting-Tool-Desktop/releases) — one dated `-BETA` prerelease per green push to `main`.
 
 ### Windows
 
@@ -73,6 +74,7 @@ A `.deb` and an AppImage are published per build. Install or run them directly �
 - **Plan DNA** — compact share strings (`ESOV2B` binary, `ESOV2T` text) for moving plans between installations. Legacy `ESOV1` imports are also accepted.
 - **PNG export** — Matrix, Inspector, and Region Map all export to image with optional opsec redaction.
 - **Markdown export** — Assignment Matrix can be exported as a markdown table.
+- **DokuWiki export** — generate a whole-plan wiki page with per-section toggles: summary totals, assignment matrix, **combat / mining / combined site matrices**, per-constellation systems, structures, moons, and workforce routing. Copy to clipboard or save as `.txt`. Op-sec redactions apply.
 - **Op-sec capture mode** — hide system names, workforce counts, gas/ice values, and supercap indicators in exports only; the live UI is unaffected.
 - **Export log** — per-plan history of every PNG/DNA export with filename and timestamp.
 
@@ -138,10 +140,21 @@ npm run package:mac        # macOS build
 npm run package:linux      # Linux .deb + AppImage
 ```
 
-GitHub Actions builds and publishes artifacts automatically:
+GitHub Actions carries a push in this repo through to installers without anyone
+re-pinning the submodule by hand:
 
-- **Beta** (`build_beta.yml`) — every push to `main`; produces Windows / macOS / Linux artifacts.
-- **Release** (`build_release.yml`) — pushes to the `release` tag; same artifacts, stable.
+1. **CI** (`.github/workflows/ci.yml`, here) — every push to `main` runs
+   typecheck and `build:web` (plus an advisory lint), then dispatches a
+   `react-updated` event to the wrapper repo.
+2. **Bump react submodule** (wrapper) — moves the `react` gitlink to the new
+   commit, commits it, and starts the packaging build.
+3. **Build** (wrapper) — packages Windows / macOS / Linux and publishes a dated
+   `-BETA` prerelease.
+
+Because the wrapper pins an exact submodule commit, step 2 is what makes a push
+here reach users at all. Setup (including the `DESKTOP_DISPATCH_TOKEN` secret the
+dispatch needs) and the manual fallback are in
+[docs/Desktop-Wrapper-Repo-Setup.md](docs/Desktop-Wrapper-Repo-Setup.md#8-ci--and-rebuilding-the-wrapper-when-this-repo-pushes).
 
 ## Scripts
 

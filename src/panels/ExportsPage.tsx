@@ -10,7 +10,19 @@ import {
   activeFlagLabels
 } from '@/state/opsecStore';
 import { useExportRegistry, type ExportablePanel } from '@/state/exportRegistry';
-import type { ExportLogEntry } from '@shared/index';
+import { buildExportFilename } from '@/data/exportFilename';
+import {
+  buildDokuWikiPage,
+  WIKI_SECTIONS,
+  WIKI_SECTION_LABELS,
+  type WikiSection
+} from '@/data/dokuwiki';
+import type {
+  ExportLogEntry,
+  MoonScan,
+  StructureNode,
+  WorkforceTransfer
+} from '@shared/index';
 
 const PANEL_ROWS: { id: ExportablePanel; label: string; hint: string }[] = [
   { id: 'matrix', label: 'Assignment Matrix', hint: 'Per-system upgrades grid' },
@@ -18,6 +30,20 @@ const PANEL_ROWS: { id: ExportablePanel; label: string; hint: string }[] = [
   { id: 'regionMap', label: 'Region Map', hint: 'Whichever region is currently displayed' },
   { id: 'inspector', label: 'Plan Inspector', hint: 'Plan-wide rollup grouped by constellation' }
 ];
+
+const WIKI_PREF_PREFIX = 'exports.wiki.';
+
+const WIKI_DEFAULTS: Record<WikiSection, boolean> = {
+  summary: true,
+  matrix: true,
+  sitesCombat: true,
+  sitesMining: true,
+  sitesCombined: false,
+  systems: true,
+  structures: true,
+  moons: false,
+  workforce: true
+};
 
 export function ExportsPage(): JSX.Element {
   const activePlanId = useUi((s) => s.activePlanId);
@@ -167,6 +193,121 @@ export function ExportsPage(): JSX.Element {
     },
     [refreshLog]
   );
+
+  const [wikiSections, setWikiSections] = useState<Record<WikiSection, boolean>>(WIKI_DEFAULTS);
+  const [wikiMessage, setWikiMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [wikiPreview, setWikiPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    void Promise.all(WIKI_SECTIONS.map((k) => evesov.prefs.get(WIKI_PREF_PREFIX + k))).then(
+      (vals) => {
+        setWikiSections((prev) => {
+          const next = { ...prev };
+          WIKI_SECTIONS.forEach((k, i) => {
+            if (vals[i] !== null) next[k] = vals[i] === '1';
+          });
+          return next;
+        });
+      }
+    );
+  }, []);
+
+  const onWikiSectionChange = useCallback((key: WikiSection, value: boolean) => {
+    setWikiSections((prev) => ({ ...prev, [key]: value }));
+    void evesov.prefs.set(WIKI_PREF_PREFIX + key, value ? '1' : '0');
+  }, []);
+
+  const buildWikiPage = useCallback(async (): Promise<{ text: string; planName: string }> => {
+    if (activePlanId === null) throw new Error('No active plan.');
+    const got = await evesov.plans.get(activePlanId);
+    if (!got) throw new Error('Plan not found.');
+
+    const needRollup =
+      wikiSections.summary || wikiSections.systems || wikiSections.workforce;
+    const needMatrix =
+      wikiSections.matrix ||
+      wikiSections.sitesCombat ||
+      wikiSections.sitesMining ||
+      wikiSections.sitesCombined;
+
+    const rollup = needRollup ? await evesov.plans.summary(activePlanId) : null;
+    const matrix = needMatrix ? await evesov.plans.matrix(activePlanId) : null;
+
+    let structures: StructureNode[] = [];
+    if (wikiSections.structures) {
+      structures = await evesov.structures.list(activePlanId);
+    }
+
+    let transfers: WorkforceTransfer[] = [];
+    if (wikiSections.workforce) {
+      transfers = await evesov.plans.getWorkforceTransfers(activePlanId);
+    }
+
+    // moonScans.list() is global, so narrow it to the plan's own systems.
+    let moons: MoonScan[] = [];
+    if (wikiSections.moons) {
+      const planSystemIds = new Set(await evesov.plans.getSystemIds(activePlanId));
+      moons = (await evesov.moonScans.list()).filter((m) => planSystemIds.has(m.systemId));
+    }
+
+    const text = buildDokuWikiPage({
+      planName: got.plan.name,
+      regions: got.plan.regions,
+      generatedAt: new Date(),
+      sections: wikiSections,
+      opsec: flags,
+      opsecPreset: preset,
+      rollup,
+      matrix,
+      structures,
+      moons,
+      transfers
+    });
+    return { text, planName: got.plan.name };
+  }, [activePlanId, wikiSections, flags, preset]);
+
+  const onPreviewWiki = useCallback(async () => {
+    try {
+      const { text } = await buildWikiPage();
+      setWikiPreview(text);
+      setWikiMessage(null);
+    } catch (err) {
+      setWikiPreview(null);
+      setWikiMessage({ kind: 'err', text: (err as Error).message });
+    }
+  }, [buildWikiPage]);
+
+  const onCopyWiki = useCallback(async () => {
+    try {
+      const { text } = await buildWikiPage();
+      await navigator.clipboard.writeText(text);
+      setWikiMessage({ kind: 'ok', text: `Copied DokuWiki page to clipboard (${text.length} chars).` });
+    } catch (err) {
+      setWikiMessage({ kind: 'err', text: (err as Error).message });
+    }
+  }, [buildWikiPage]);
+
+  const onSaveWiki = useCallback(async () => {
+    if (activePlanId === null) return;
+    try {
+      const { text, planName } = await buildWikiPage();
+      const filename = buildExportFilename({ planName, panel: 'wiki', ext: 'txt' });
+      const result = await evesov.exports.captureText(filename, text, {
+        planId: activePlanId,
+        planName,
+        panel: 'wiki',
+        opsecPreset: preset
+      });
+      if (!result.saved) {
+        setWikiMessage({ kind: 'ok', text: 'Save cancelled.' });
+        return;
+      }
+      setWikiMessage({ kind: 'ok', text: `Saved to ${result.path}` });
+      await refreshLog();
+    } catch (err) {
+      setWikiMessage({ kind: 'err', text: (err as Error).message });
+    }
+  }, [activePlanId, buildWikiPage, preset, refreshLog]);
 
   const opsecActive = useMemo(() => activeFlagLabels(flags), [flags]);
 
@@ -443,6 +584,54 @@ export function ExportsPage(): JSX.Element {
           The compact form starts with <code>ESOV2B</code>; the readable text form starts with{' '}
           <code>ESOV2T</code>. Older <code>ESOV1</code> strings still import. Imported plans are
           validated against your local seed database; unknown systems or upgrades are rejected.
+        </p>
+      </section>
+
+      <section className="exports__card" id="exports-wiki-card">
+        <header className="exports__card-header">
+          <h3>DokuWiki page</h3>
+          <div className="exports__card-actions">
+            <OpsecPill />
+            <button type="button" className="exports__btn" onClick={() => void onCopyWiki()}>
+              Copy to clipboard
+            </button>
+            <button type="button" className="exports__btn" onClick={() => void onSaveWiki()}>
+              Save as .txt
+            </button>
+            <button
+              type="button"
+              className="exports__btn exports__btn--small"
+              onClick={() =>
+                wikiPreview === null ? void onPreviewWiki() : setWikiPreview(null)
+              }
+            >
+              {wikiPreview === null ? 'Preview' : 'Hide preview'}
+            </button>
+          </div>
+        </header>
+        <div className="exports__wiki-grid">
+          {WIKI_SECTIONS.map((key) => (
+            <label key={key} className="exports__wiki-row">
+              <input
+                type="checkbox"
+                checked={wikiSections[key]}
+                onChange={(e) => onWikiSectionChange(key, e.target.checked)}
+              />
+              <span>{WIKI_SECTION_LABELS[key]}</span>
+            </label>
+          ))}
+        </div>
+        {wikiMessage && (
+          <div className={`exports__wiki-message exports__wiki-message--${wikiMessage.kind}`}>
+            {wikiMessage.text}
+          </div>
+        )}
+        {wikiPreview !== null && <pre className="exports__wiki-preview">{wikiPreview}</pre>}
+        <p className="exports__dna-hint">
+          Generates one DokuWiki page for the active plan. Op-sec redactions apply — system
+          names become <code>System-N</code> and hidden resources render as <code>—</code>.
+          Saving writes a <code>.txt</code> and records a <code>text-wiki</code> row in the
+          export log; copying to the clipboard does not.
         </p>
       </section>
 

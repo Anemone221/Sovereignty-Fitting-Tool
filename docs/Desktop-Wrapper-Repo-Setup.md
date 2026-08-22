@@ -366,14 +366,148 @@ Commit and push.
 
 ---
 
-## 8. Update CI
+## 8. CI — and rebuilding the wrapper when this repo pushes
 
-- **Wrapper repo:** copy `.github/workflows/build_beta.yml` and add
-  `git submodule update --init --recursive` before any `npm ci`.
-- **Application repo:** add a new minimal workflow that runs
-  `npm run typecheck` and `npm run build:web`. Optionally add a grep gate
-  asserting that nothing under `core/` runtime-imports `electron` or
-  `better-sqlite3`.
+A submodule pins an **exact commit**. Pushing to this repo's `main` changes
+nothing downstream on its own: the wrapper keeps building whatever SHA its
+`react` gitlink names until someone moves it. The pipeline below closes that gap
+automatically.
+
+### The chain
+
+```
+push to main (application repo)
+  └─ ci.yml · verify          typecheck + eslint + build:web
+      └─ ci.yml · notify-desktop
+          └─ repository_dispatch  { event_type: react-updated }  ──▶ wrapper repo
+              └─ bump-react.yml   git submodule update --remote react
+                                  commit "Bump react submodule to <sha>" + push
+                  └─ gh workflow run build.yml
+                      └─ build.yml   win / mac / linux package + BETA release
+```
+
+Three deliberate properties:
+
+- **Verified before dispatch.** `notify-desktop` `needs: verify`, so a commit
+  that doesn't typecheck never spends a three-platform packaging build.
+- **The pointer is committed, not just built.** `bump-react.yml` pushes the new
+  gitlink, so `main` in the wrapper always names the SHA its latest release was
+  cut from. Builds stay reproducible from a plain checkout.
+- **The build is started explicitly.** GitHub deliberately does not fire
+  `on: push` for a push made with `GITHUB_TOKEN`, so `bump-react.yml` ends with
+  `gh workflow run build.yml`. That is why `build.yml` carries a
+  `workflow_dispatch:` trigger — removing it breaks the chain silently.
+
+### Application repo (this one)
+
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — already committed.
+`verify` runs `npm ci`, `npm run typecheck`, `npx eslint .`, `npm run build:web`.
+Typecheck and build block; **lint is `continue-on-error`** because the tree
+carries 14 pre-existing violations and a blocking lint would stop every release.
+Clear them and drop the flag. `notify-desktop` then POSTs to the wrapper's
+`dispatches` endpoint. It is guarded
+by `github.repository == 'Anemone221/Sovereignty-Fitting-Tool'` so forks and PRs
+never fire it, and it warns-and-exits rather than failing when the token is
+absent.
+
+### Wrapper repo
+
+`.github/workflows/bump-react.yml` — new file, and `workflow_dispatch:` added to
+the `on:` block of the existing `build.yml`:
+
+```yaml
+name: Bump react submodule
+
+on:
+  repository_dispatch:
+    types: [react-updated]
+  workflow_dispatch:
+
+permissions:
+  contents: write # commit the new submodule pointer
+  actions: write  # start Build via workflow_dispatch
+
+concurrency:
+  group: bump-react
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: main
+
+      - name: Move react/ to the tip of its tracked branch
+        run: git submodule update --remote --recursive react
+
+      - name: Commit the new pointer
+        id: commit
+        run: |
+          if git diff --quiet -- react; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          sha=$(git -C react rev-parse --short HEAD)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Bump react submodule to $sha"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger the packaging build
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build.yml --ref main
+```
+
+`--remote` follows `submodule.react.branch` — the `branch = main` line in the
+wrapper's `.gitmodules`. Without that line it falls back to the submodule
+remote's default branch, which is the same commit today; keep the line so the
+tracked branch stays explicit rather than incidental.
+
+### One-time setup: the dispatch token
+
+`GITHUB_TOKEN` is scoped to its own repository, so it cannot dispatch to the
+wrapper. Create a **fine-grained PAT** and store it as a secret:
+
+1. GitHub → Settings → Developer settings → Personal access tokens →
+   Fine-grained tokens → **Generate new token**.
+2. Repository access: **only** `Anemone221/Sov-Fitting-Tool-Desktop`.
+3. Repository permissions: **Contents: Read and write** (this is what grants
+   the `dispatches` endpoint). Nothing else is needed.
+4. Set an expiry you'll actually notice — when it lapses, pushes here keep
+   passing CI and the wrapper just stops rebuilding. The `notify-desktop` step
+   emits a `::warning::` in that case rather than failing the run.
+5. In **this** repo: Settings → Secrets and variables → Actions → New
+   repository secret, named `DESKTOP_DISPATCH_TOKEN`.
+
+### Verifying the chain
+
+```bash
+# From the wrapper repo — exercises everything except the cross-repo hop.
+gh workflow run bump-react.yml --ref main
+gh run list --workflow=bump-react.yml --limit 1
+
+# From the application repo — the full chain, no code change needed.
+gh workflow run ci.yml --ref main
+```
+
+Then confirm a `Bump react submodule to <sha>` commit landed on the wrapper's
+`main` and a `Build` run followed it.
+
+### Manual fallback
+
+The chain is a convenience, not a dependency. Re-pinning by hand still works:
+
+```bash
+cd Sov-Fitting-Tool-Desktop
+git submodule update --remote react
+git add react && git commit -m "Bump react submodule"
+git push
+```
 
 ---
 
@@ -404,3 +538,7 @@ Once both repos are working:
 - [ ] Application repo `npm run preview:web` loads the shell — visible blank
       shell with one or more `BackendUnavailableError` console messages
 - [ ] Both repos pass `npm run typecheck`
+- [ ] `DESKTOP_DISPATCH_TOKEN` is set in the application repo
+- [ ] A push to the application repo's `main` produces a
+      `Bump react submodule to <sha>` commit on the wrapper's `main`, followed
+      by a `Build` run

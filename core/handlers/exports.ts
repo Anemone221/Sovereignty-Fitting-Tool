@@ -231,6 +231,38 @@ export function registerExportsHandlers(): void {
     }
   );
 
+  register(
+    'exports.captureText',
+    async (
+      filename: string,
+      text: string,
+      meta?: CapturePngMeta
+    ): Promise<CapturePngResult> => {
+      const result = await getHost().saveFile({
+        title: 'Export text',
+        defaultPath: filename,
+        filters: [{ name: 'Text file', extensions: ['txt'] }],
+        bytes: text,
+        forceExtension: 'txt',
+      });
+      if (!result.saved || !result.path) return { saved: false };
+
+      let logId: number | undefined;
+      if (meta?.planName) {
+        logId = logExport({
+          planId: meta.planId ?? null,
+          planName: meta.planName,
+          exportType: meta.panel ? `text-${meta.panel}` : 'text',
+          panel: meta.panel ?? null,
+          systemName: meta.systemName ?? null,
+          filename: result.path,
+          opsecPreset: meta.opsecPreset ?? null,
+        });
+      }
+      return { saved: true, path: result.path, logId };
+    }
+  );
+
   register('exports.list', (planId: number | null): ExportLogEntry[] => {
     const rows = (planId == null
       ? getDb()

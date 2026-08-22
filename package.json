@@ -1,6 +1,6 @@
 {
   "name": "eve-sov-tool",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Sov Fitting Tool (SFT) — EVE Online sovereignty upgrade planning tool. Renderer + portable core; the Electron desktop wrapper consumes this repo as a submodule.",
   "author": {
     "name": "Sov Fitting Tool (SFT) Contributors",
