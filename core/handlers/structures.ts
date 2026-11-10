@@ -1,10 +1,19 @@
 import type {
     PlanStructure,
     StructureAddPayload,
+    StructureImportItem,
+    StructureImportPreviewRow,
+    StructureImportStatus,
+    StructureListImportResult,
     StructureLocation,
     StructureNode,
     StructureType,
 } from "@shared/index";
+import {
+    matchStructureKeyword,
+    parseStructureList,
+    typeFromColumn,
+} from '../import/structureListParser.js';
 import { register } from '../registerCore.js';
 import { getDb, type Db } from '../db/Db.js';
 import { getHost } from '../host.js';
@@ -65,37 +74,23 @@ function groupIntoNodes(rows: StructureDbRow[]): StructureNode[] {
     return Array.from(bySystem.values());
 }
 
-function inferType(line: string): {
-    structureType: StructureType;
-    location: StructureLocation | null;
-} {
-    const l = line.toLowerCase();
-    if (l.includes("keepstar"))
-        return { structureType: "Keepstar", location: "Deep" };
-    if (l.includes("fortizar"))
-        return { structureType: "Fortizar", location: "Deep" };
-    if (l.includes("astrahus"))
-        return { structureType: "Astrahus", location: "Deep" };
-    if (l.includes("azbel"))
-        return { structureType: "Azbel", location: "Deep" };
-    if (l.includes("raitaru"))
-        return { structureType: "Raitaru", location: "Deep" };
-    if (l.includes("tenebrex"))
-        return { structureType: "Tenebrex", location: "Deep" };
-    if (l.includes("pharolux"))
-        return { structureType: "Pharolux", location: "Deep" };
-    if (l.includes("ansiblex"))
-        return { structureType: "Ansiblex", location: "Gate" };
-    if (l.includes("metenox"))
-        return { structureType: "Metenox", location: "Moon" };
-    if (l.includes("athanor"))
-        return { structureType: "Athanor", location: "Moon" };
-    if (l.includes("tatara"))
-        return { structureType: "Tatara", location: "Moon" };
-    if (l.includes("sotiyo"))
-        return { structureType: "Sotiyo", location: "Deep" };
-    return { structureType: "Other", location: null };
-}
+// Regions the plan covers: every region containing a system in the plan's
+// scopes (region, constellation or single system), plus regions of systems
+// that have upgrades or a status set. Same set the Region Map dropdown lists.
+const PLAN_REGIONS_SQL = `
+  SELECT DISTINCT s.region_id FROM systems s
+  JOIN plan_scopes ps ON
+    (ps.scope_type = 'system'        AND ps.scope_id = s.id)               OR
+    (ps.scope_type = 'constellation' AND ps.scope_id = s.constellation_id) OR
+    (ps.scope_type = 'region'        AND ps.scope_id = s.region_id)
+  WHERE ps.plan_id = @planId
+  UNION
+  SELECT s.region_id FROM plan_upgrades pu JOIN systems s ON s.id = pu.system_id
+  WHERE pu.plan_id = @planId
+  UNION
+  SELECT s.region_id FROM plan_system_status x JOIN systems s ON s.id = x.system_id
+  WHERE x.plan_id = @planId
+`;
 
 function broadcastPlanChanged(planId: number): void {
     getHost().broadcast('plan-changed', { planId });
@@ -205,13 +200,107 @@ export function registerStructuresHandlers(): void {
             let count = 0;
             db.transaction(() => {
                 for (const line of lines) {
-                    const { structureType, location } = inferType(line);
+                    const { structureType, location } = matchStructureKeyword(line);
                     ins.run(planId, systemId, structureType, line, location);
                     count++;
                 }
             })();
             if (count > 0) broadcastPlanChanged(planId);
             return { count };
+        },
+    );
+
+    // Two-step plan-wide import of text copied from EVE's corporation
+    // Structures window: preview (writes nothing) -> user review -> import of
+    // the selected rows. Only the system, name and Type column are used.
+    register(
+        "structures.previewStructureList",
+        (planId: number, text: string): StructureImportPreviewRow[] => {
+            const db = getDb();
+            const findSystem = db.prepare(
+                `SELECT s.id, r.id AS region_id, r.name AS region_name
+         FROM systems s JOIN regions r ON r.id = s.region_id
+         WHERE s.name = ? COLLATE NOCASE`,
+            );
+            const existing = db.prepare(
+                "SELECT 1 FROM plan_structures WHERE plan_id = ? AND system_id = ? AND name = ?",
+            );
+            const planRegions = new Set(
+                (db.prepare(PLAN_REGIONS_SQL).all({ planId }) as { region_id: number }[])
+                    .map((r) => r.region_id),
+            );
+            // Repeats within the paste: first occurrence wins.
+            const seen = new Set<string>();
+
+            return parseStructureList(text).map((row): StructureImportPreviewRow => {
+                const { structureType, location } = typeFromColumn(row.typeText);
+                const base = {
+                    line: row.line,
+                    systemName: row.systemName,
+                    name: row.name,
+                    typeText: row.typeText,
+                    structureType,
+                    location,
+                };
+                const system = findSystem.get(row.systemName) as
+                    | { id: number; region_id: number; region_name: string }
+                    | undefined;
+                if (!system) {
+                    return { ...base, systemId: null, regionName: null, status: "unknownSystem" };
+                }
+                const key = `${system.id}\u0000${row.name}`;
+                const isDuplicate =
+                    seen.has(key) || !!existing.get(planId, system.id, row.name);
+                seen.add(key);
+                const status: StructureImportStatus = isDuplicate
+                    ? "duplicate"
+                    // A plan with no regions yet treats everything as in-plan.
+                    : planRegions.size > 0 && !planRegions.has(system.region_id)
+                      ? "outsidePlan"
+                      : "new";
+                return {
+                    ...base,
+                    systemId: system.id,
+                    regionName: system.region_name,
+                    status,
+                };
+            });
+        },
+    );
+
+    register(
+        "structures.importStructureList",
+        (planId: number, items: StructureImportItem[]): StructureListImportResult => {
+            const db = getDb();
+            assertWritable(db, planId);
+            const systemExists = db.prepare("SELECT 1 FROM systems WHERE id = ?");
+            const existing = db.prepare(
+                "SELECT 1 FROM plan_structures WHERE plan_id = ? AND system_id = ? AND name = ?",
+            );
+            const ins = db.prepare(
+                `INSERT INTO plan_structures (plan_id, system_id, structure_type, name, location, source)
+         VALUES (?, ?, ?, ?, ?, 'clipboard')`,
+            );
+
+            const result: StructureListImportResult = { imported: 0, skippedDuplicates: 0 };
+            db.transaction(() => {
+                for (const item of items) {
+                    const name = typeof item.name === "string" ? item.name.trim() : "";
+                    if (!name || !systemExists.get(item.systemId)) continue;
+                    // Re-checked here: the plan may have changed since the preview,
+                    // and the DB already includes rows inserted earlier in this loop.
+                    if (existing.get(planId, item.systemId, name)) {
+                        result.skippedDuplicates++;
+                        continue;
+                    }
+                    // Type is recomputed from the Type column, never from the name.
+                    const { structureType, location } = typeFromColumn(item.typeText);
+                    ins.run(planId, item.systemId, structureType, name, location);
+                    result.imported++;
+                }
+            })();
+            if (result.imported > 0) broadcastPlanChanged(planId);
+            return result;
         },
     );
 

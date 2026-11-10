@@ -192,9 +192,27 @@ export function registerMapHandlers(): void {
         }
       }
 
+      // Name + region for every bridge endpoint, so the map can label links whose
+      // far end is in another region and has no node on this region's SVG.
+      const alnSystems: MapOverlayData['alnSystems'] = {};
+      const endpointIds = [...new Set(alnPairs.flat())];
+      if (endpointIds.length > 0) {
+        const rows = db
+          .prepare(
+            `SELECT s.id, s.name, r.id AS region_id, r.name AS region_name
+             FROM systems s JOIN regions r ON r.id = s.region_id
+             WHERE s.id IN (${endpointIds.map(() => '?').join(',')})`,
+          )
+          .all(...endpointIds) as { id: number; name: string; region_id: number; region_name: string }[];
+        for (const r of rows) {
+          alnSystems[r.id] = { name: r.name, regionId: r.region_id, regionName: r.region_name };
+        }
+      }
+
       return {
         systems: Array.from(overlayMap.values()),
         alnPairs,
+        alnSystems,
         upgradeIcons,
       };
     },

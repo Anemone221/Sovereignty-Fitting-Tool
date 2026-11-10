@@ -1,6 +1,8 @@
 import { evesov } from "@/api/evesov";
 import { useUi } from "@/state/uiStore";
 import type {
+    StructureImportPreviewRow,
+    StructureImportStatus,
     StructureLocation,
     StructureNode,
     StructureType,
@@ -146,6 +148,7 @@ export function StructuresPage() {
 
     return (
         <div className="structures">
+            <StructureListImporter activePlanId={activePlanId} />
             {byConstellation.size === 0 && (
                 <p className="structures__empty">
                     No structures planned. Use the add button next to a system
@@ -378,6 +381,280 @@ export function StructuresPage() {
                     activePlanId={activePlanId}
                     onRefresh={refresh}
                 />
+            )}
+        </div>
+    );
+}
+
+const STATUS_LABELS: Record<StructureImportStatus, string> = {
+    new: "New",
+    outsidePlan: "Outside plan",
+    duplicate: "Duplicate",
+    unknownSystem: "Unknown system",
+};
+
+/** Only new and outside-plan rows can be imported. */
+function isSelectable(row: StructureImportPreviewRow): boolean {
+    return row.status === "new" || row.status === "outsidePlan";
+}
+
+function plural(n: number, word: string): string {
+    return `${n} ${word}${n !== 1 ? "s" : ""}`;
+}
+
+/**
+ * Plan-wide import of text copied from EVE's corporation Structures window.
+ * Two steps: paste -> Review (nothing saved) -> tick rows -> Import selected.
+ * New rows in the plan's regions start ticked; outside-plan rows can be ticked
+ * by hand; duplicates and unknown systems cannot be imported.
+ */
+function StructureListImporter({ activePlanId }: { activePlanId: number }) {
+    const readOnly = useUi((s) => s.activePlanReadOnly);
+    const [open, setOpen] = useState(false);
+    const [text, setText] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [preview, setPreview] = useState<StructureImportPreviewRow[] | null>(
+        null,
+    );
+    // Selected rows, keyed by line number (unique per structure in a paste).
+    const [selected, setSelected] = useState<Set<number>>(new Set());
+    const [result, setResult] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    const reset = () => {
+        setPreview(null);
+        setSelected(new Set());
+        setResult(null);
+        setError(null);
+    };
+
+    // A different plan means different regions and duplicates: start over.
+    useEffect(() => {
+        setPreview(null);
+        setSelected(new Set());
+        setResult(null);
+        setError(null);
+    }, [activePlanId]);
+
+    const review = async () => {
+        setBusy(true);
+        reset();
+        try {
+            const rows = await evesov.structures.previewStructureList(
+                activePlanId,
+                text,
+            );
+            setPreview(rows);
+            setSelected(
+                new Set(rows.filter((r) => r.status === "new").map((r) => r.line)),
+            );
+        } catch (e) {
+            setError(e instanceof Error ? e.message : String(e));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const commit = async () => {
+        if (!preview) return;
+        const items = preview
+            .filter((r) => selected.has(r.line) && isSelectable(r) && r.systemId != null)
+            .map((r) => ({
+                systemId: r.systemId as number,
+                name: r.name,
+                typeText: r.typeText,
+            }));
+        setBusy(true);
+        setError(null);
+        try {
+            const res = await evesov.structures.importStructureList(
+                activePlanId,
+                items,
+            );
+            let msg = `Imported ${res.imported}`;
+            if (res.skippedDuplicates > 0) {
+                msg += ` · Skipped ${plural(res.skippedDuplicates, "duplicate")} (added since review)`;
+            }
+            setPreview(null);
+            setSelected(new Set());
+            setText("");
+            setResult(msg);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : String(e));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const toggle = (line: number) => {
+        setSelected((prev) => {
+            const next = new Set(prev);
+            if (next.has(line)) next.delete(line);
+            else next.add(line);
+            return next;
+        });
+    };
+
+    if (!open) {
+        return (
+            <div className="structures__toolbar">
+                <button
+                    type="button"
+                    className="structures__btn-import"
+                    title="Import structures from EVE's corporation Structures window"
+                    onClick={() => setOpen(true)}
+                >
+                    ⎘ Import structure list
+                </button>
+            </div>
+        );
+    }
+
+    const counts: Record<StructureImportStatus, number> = {
+        new: 0,
+        outsidePlan: 0,
+        duplicate: 0,
+        unknownSystem: 0,
+    };
+    for (const r of preview ?? []) counts[r.status]++;
+    const summary = (Object.keys(counts) as StructureImportStatus[])
+        .map((s) => `${counts[s]} ${STATUS_LABELS[s].toLowerCase()}`)
+        .join(" · ");
+
+    return (
+        <div className="structures__import-form structures__import-form--list">
+            {preview === null ? (
+                <>
+                    <textarea
+                        rows={6}
+                        placeholder="Paste rows copied from EVE's corporation Structures window"
+                        value={text}
+                        onChange={(e) => {
+                            setText(e.target.value);
+                            setResult(null);
+                            setError(null);
+                        }}
+                    />
+                    <div className="structures__import-actions">
+                        <button
+                            type="button"
+                            disabled={busy || !text.trim()}
+                            onClick={() => void review()}
+                        >
+                            Review
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setOpen(false);
+                                setText("");
+                                reset();
+                            }}
+                        >
+                            Close
+                        </button>
+                        {result && (
+                            <span className="structures__import-result">{result}</span>
+                        )}
+                        {error && (
+                            <span className="structures__import-error">{error}</span>
+                        )}
+                    </div>
+                </>
+            ) : preview.length === 0 ? (
+                <div className="structures__import-actions">
+                    <button type="button" onClick={reset}>
+                        Back
+                    </button>
+                    <span className="structures__import-error">
+                        No structures found. Copy rows from EVE&apos;s corporation
+                        Structures window.
+                    </span>
+                </div>
+            ) : (
+                <>
+                    <div className="structures__review-summary">{summary}</div>
+                    <div className="structures__review-scroll">
+                        <table className="structures__review">
+                            <thead>
+                                <tr>
+                                    <th />
+                                    <th>Status</th>
+                                    <th>Region</th>
+                                    <th>System</th>
+                                    <th>Type</th>
+                                    <th>Name</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {preview.map((r) => (
+                                    <tr
+                                        key={r.line}
+                                        className={`structures__review-row structures__review-row--${r.status}`}
+                                    >
+                                        <td>
+                                            {isSelectable(r) ? (
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selected.has(r.line)}
+                                                    onChange={() => toggle(r.line)}
+                                                    aria-label={`Import ${r.name}`}
+                                                />
+                                            ) : (
+                                                "—"
+                                            )}
+                                        </td>
+                                        <td>{STATUS_LABELS[r.status]}</td>
+                                        <td>{r.regionName ?? "—"}</td>
+                                        <td>{r.systemName}</td>
+                                        <td title={r.typeText ?? "No Type column"}>
+                                            {r.structureType}
+                                        </td>
+                                        <td>{r.name}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="structures__import-actions">
+                        <button
+                            type="button"
+                            disabled={busy || readOnly || selected.size === 0}
+                            title={readOnly ? "Plan is read-only" : undefined}
+                            onClick={() => void commit()}
+                        >
+                            Import {selected.size} selected
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setSelected(
+                                    new Set(
+                                        preview
+                                            .filter((r) => r.status === "new")
+                                            .map((r) => r.line),
+                                    ),
+                                )
+                            }
+                        >
+                            Select all new
+                        </button>
+                        <button type="button" onClick={() => setSelected(new Set())}>
+                            Select none
+                        </button>
+                        <button type="button" onClick={reset}>
+                            Back
+                        </button>
+                        {readOnly && (
+                            <span className="structures__import-error">
+                                Plan is read-only
+                            </span>
+                        )}
+                        {error && (
+                            <span className="structures__import-error">{error}</span>
+                        )}
+                    </div>
+                </>
             )}
         </div>
     );

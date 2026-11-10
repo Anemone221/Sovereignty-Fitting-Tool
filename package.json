@@ -14,7 +14,8 @@
     "preview:web": "vite preview",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck:core": "tsc --noEmit -p tsconfig.core.json",
-    "typecheck": "npm run typecheck:web && npm run typecheck:core"
+    "typecheck": "npm run typecheck:web && npm run typecheck:core",
+    "test": "vitest run"
   },
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",
@@ -35,6 +36,7 @@
     "eslint": "^10.2.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.59.1",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vitest": "^3.2.7"
   }
 }

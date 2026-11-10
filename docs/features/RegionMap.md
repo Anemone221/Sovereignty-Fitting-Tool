@@ -9,6 +9,8 @@ Displays a dotlan-sourced SVG map of a selected region with upgrade/structure ic
 ## IPC
 - `map.regionSvg(regionId)` → `string | null` — raw sanitized SVG for a region.
 - `map.overlayData(planId, regionId)` → `MapOverlayData` — per-system icon flags + ALN pairs.
+  - `alnPairs` includes links with only one end in the region; `alnSystems` gives each endpoint's name and region.
+  - **Off-map bridge stubs**: when the far end has no node on this region's SVG (another region, not a dotlan border node), a short dashed stub is drawn from the local system, pointing away from the map centre, labelled `→ <system> (<region>)`. Clicking the label selects that system, which switches the map to its region; the region dropdown always includes the region being shown, even if it's outside the plan. Stubs live in `#evesov-lines`, so *Hide jump bridge lines* removes them; with *Hide system names*, labels show only the region (live and in exports).
 - `map.auraData(planId, regionId)` → `MapAuraData` — exploration aura intensity per system (BFS 5 hops from Exploration Detectors).
 
 ## Critical files

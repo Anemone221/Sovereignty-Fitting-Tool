@@ -22,6 +22,76 @@ import { siteEffectsFor, aggregateGrants, formatGrants } from '@/data/effects';
 import { producibleFromPlanets, highestProducibleTier } from '@/data/piRecipes';
 import type { PlanetType } from '@/data/piRecipes';
 
+const ALN_STUB_LENGTH = 48;
+const ALN_COLOUR = '#58a6ff';
+
+/**
+ * Stub for a jump bridge whose far end is in another region (no node on this
+ * map): a dashed line from the system pointing away from the map centre, with
+ * a clickable label "→ <system> (<region>)" that opens the far system.
+ */
+function makeAlnStub(o: {
+  x: number;
+  y: number;
+  centreX: number;
+  centreY: number;
+  farName: string;
+  farRegionName: string;
+  hereName: string;
+  hideNames: boolean;
+  onOpen: () => void;
+}): SVGGElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  let dx = o.x - o.centreX;
+  let dy = o.y - o.centreY;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) {
+    dx = 1;
+    dy = 0;
+  } else {
+    dx /= len;
+    dy /= len;
+  }
+  const ex = o.x + dx * ALN_STUB_LENGTH;
+  const ey = o.y + dy * ALN_STUB_LENGTH;
+
+  const g = document.createElementNS(NS, 'g');
+  g.setAttribute('class', 'evesov-aln-stub');
+
+  const line = document.createElementNS(NS, 'path');
+  line.setAttribute('d', `M ${o.x} ${o.y} L ${ex} ${ey}`);
+  line.setAttribute('stroke', ALN_COLOUR);
+  line.setAttribute('stroke-width', '2');
+  line.setAttribute('stroke-dasharray', '6 3');
+  line.setAttribute('fill', 'none');
+  line.setAttribute('opacity', '0.85');
+  g.appendChild(line);
+
+  const label = document.createElementNS(NS, 'text');
+  label.setAttribute('class', 'evesov-aln-stub__label');
+  label.setAttribute('x', String(ex + dx * 3));
+  label.setAttribute('y', String(ey + dy * 3 + 3));
+  label.setAttribute('text-anchor', dx >= 0 ? 'start' : 'end');
+  label.setAttribute('font-size', '9');
+  label.setAttribute('font-weight', 'bold');
+  label.setAttribute('fill', ALN_COLOUR);
+  label.setAttribute('cursor', 'pointer');
+  // Region-only text for exports with "hide system names" (see applyRegionMapOpsec).
+  label.dataset.redacted = `→ (${o.farRegionName})`;
+  label.textContent = o.hideNames ? label.dataset.redacted : `→ ${o.farName} (${o.farRegionName})`;
+  const title = document.createElementNS(NS, 'title');
+  title.textContent = o.hideNames
+    ? `Ansiblex jump bridge to ${o.farRegionName}`
+    : `Ansiblex jump bridge: ${o.hereName} → ${o.farName} (${o.farRegionName})\nClick to open ${o.farName}`;
+  label.appendChild(title);
+  label.addEventListener('click', (e) => {
+    e.stopPropagation();
+    o.onOpen();
+  });
+  g.appendChild(label);
+  return g;
+}
+
 // Applies op-sec redactions imperatively on a cloned SVG before export. Operates on the
 // clone — the live SVG in the DOM is never mutated. RegionMap exports both PNG (rasterised
 // from a cloned SVG via <img>) and standalone SVG; in both paths body[data-opsec-*] CSS
@@ -44,6 +114,10 @@ function applyRegionMapOpsec(clone: SVGSVGElement): void {
     clone.querySelectorAll('.evesov-moon-label').forEach((el) => el.remove());
   }
   if (flags.hideSystemNames) {
+    // Off-map bridge stubs name a system in another region: keep only the region.
+    clone.querySelectorAll<SVGTextElement>('text.evesov-aln-stub__label').forEach((t) => {
+      t.textContent = t.dataset.redacted ?? '→';
+    });
     let counter = 0;
     const skipAncestor = (el: Element): boolean => {
       let p: Element | null = el;
@@ -226,8 +300,10 @@ export function RegionMap() {
   }, [activePlanId]);
 
   // Regions shown in the dropdown: plan regions when a plan is active, full tree otherwise.
+  // The current region is always included, so following a jump bridge stub into a
+  // region outside the plan still shows that region's name in the dropdown.
   const planRegions = activePlanId && planRegionIds.size > 0
-    ? tree.filter((r) => planRegionIds.has(r.id))
+    ? tree.filter((r) => planRegionIds.has(r.id) || r.id === selectedRegionId)
     : tree;
 
   // Auto-select first plan region when the plan changes, unless the current selection
@@ -568,10 +644,42 @@ export function RegionMap() {
 
     // 2. ALN jump bridge lines
     if (!(captureActive && opsecFlags.hideJumpBridges)) {
+      // Centre of all nodes on this map: off-map stubs point away from it.
+      let centreX = 0;
+      let centreY = 0;
+      for (const p of pos.values()) {
+        centreX += p.x + NODE_CX;
+        centreY += p.y + NODE_CY;
+      }
+      centreX /= pos.size;
+      centreY /= pos.size;
+
       for (const [a, b] of overlay.alnPairs) {
         const posA = pos.get(a);
         const posB = pos.get(b);
-        if (!posA || !posB) continue;
+        if (!posA && !posB) continue;
+        if (!posA || !posB) {
+          // One end is in another region and has no node here: draw a stub.
+          const [hereId, farId] = posA ? [a, b] : [b, a];
+          const here = (posA ?? posB)!;
+          const far = overlay.alnSystems[farId];
+          if (far) {
+            linesG.appendChild(
+              makeAlnStub({
+                x: here.x + NODE_CX,
+                y: here.y + NODE_CY,
+                centreX,
+                centreY,
+                farName: far.name,
+                farRegionName: far.regionName,
+                hereName: overlay.alnSystems[hereId]?.name ?? '',
+                hideNames: captureActive && opsecFlags.hideSystemNames,
+                onOpen: () => useUi.getState().selectSystem(farId),
+              }),
+            );
+          }
+          continue;
+        }
         const x1 = posA.x + NODE_CX;
         const y1 = posA.y + NODE_CY;
         const x2 = posB.x + NODE_CX;

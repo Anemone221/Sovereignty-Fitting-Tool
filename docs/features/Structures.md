@@ -30,14 +30,16 @@ CREATE INDEX IF NOT EXISTS idx_plan_structures_system
 - `structures.list(planId, systemId?)` → `StructureNode[]` — grouped tree; omit `systemId` for plan-wide view.
 - `structures.add(planId, systemId, structure)` → `{ id }` — inserts a row; broadcasts `plan-changed`.
 - `structures.remove(planId, structureId)` — deletes; broadcasts `plan-changed`.
-- `structures.importClipboard(planId, systemId, text)` → `{ count }` — parses EVE clipboard text, inserts rows; broadcasts `plan-changed`.
+- `structures.importClipboard(planId, systemId, text)` → `{ count }` — one structure name per line, all filed under `systemId`; type guessed from keywords in the name; broadcasts `plan-changed`.
+- `structures.previewStructureList(planId, text)` → `StructureImportPreviewRow[]` — parses text copied from EVE's corporation Structures window and classifies each row for review. Writes nothing. See *Structure list import* below.
+- `structures.importStructureList(planId, items)` → `{ imported, skippedDuplicates }` — saves the reviewed rows the user selected; re-checks duplicates; broadcasts `plan-changed` if anything was imported.
 - `structures.profitability(structureId)` → `ProfitabilityResult | null` — null if moon data or market prices are absent. Implemented in [electron/ipc/profitability.ts](../../electron/ipc/profitability.ts); applies the user-selected price field (`settings.marketSync.priceField`) and structure-specific refining efficiency (40% Metenox, 96% Athanor/Tatara) and fuel burn (5 fuel blocks/hr + 200 magmatic gas/hr for Metenox).
 
 ## Critical files
 
 - `src/panels/StructuresPage.tsx` — plan-wide tree view with profitability column.
 - `src/panels/SystemDetail.tsx` — per-system structure cards section; Sotiyo flag in header.
-- `src/data/structureParser.ts` — pure function: EVE clipboard text → `StructureImport[]`.
+- `core/import/structureListParser.ts` — pure parser for the Structures-window paste, plus the shared type keyword table. Tests: `structureListParser.test.ts` (`npm test`).
 - `electron/ipc/structures.ts` — all IPC handlers.
 - `electron/ipc/index.ts` — registers structures handlers.
 - `electron/preload.ts` — exposes `structures.*`.
@@ -53,6 +55,39 @@ CREATE INDEX IF NOT EXISTS idx_plan_structures_system
 - **Sotiyo flag**: in `SystemDetail`, if `structures.list(planId, systemId)` contains a `'Sotiyo'` entry AND the assigned upgrades include the Supercapital Production upgrade, a flag class is added to the system title. The flag propagates to the Universe tree via the existing `plan-changed` event.
 - **Profitability**: gated on `data.hasMarketData()`. If unavailable, the profitability cell shows "Enable Data Sync." The calculation uses moon ore composition from `moon_scans` × ore prices from the market data table.
 - The Structures page defaults to showing the active plan's structures. Passing `planId = null` would show all plans — not implemented initially; add if users need cross-plan views.
+
+## Structure list import
+
+Paste format (EVE corporation Structures window), per structure:
+
+```text
+State <TAB> Region <TAB> System      ← first line: exactly 3 non-empty tab parts
+Name                                 ← next non-empty line
+<Corp> logo / Corporation            (ignored)
+Type <TAB> Fuel <TAB> ...            ← first line with 2+ tab parts; part 1 = type
+Synced                               (ignored)
+```
+
+- Columns may be separated by tabs (as EVE copies them) or by runs of 2+ spaces (as many editors and chat apps convert them).
+- Only the system, name and Type column are used. Fuel, state, corporation etc. are discarded.
+- **Type comes only from the Type column**, never the name. Missing or unrecognised → `Other` with no location.
+- **System** is looked up by name (`COLLATE NOCASE`).
+- Inserted rows use `source = 'clipboard'`. One transaction; `plan-changed` broadcast only if something was imported.
+
+### Review step
+
+*Import structure list* (top of the Structures page) → paste → **Review** shows a table (status, region, system, type, name) with a checkbox per row. Nothing is saved until **Import N selected**.
+
+| Status | Meaning | Ticked by default | Selectable |
+| --- | --- | --- | --- |
+| `new` | Known system in one of the plan's regions, not yet in the plan | yes | yes |
+| `outsidePlan` | Known system whose region the plan does not cover | no | yes |
+| `duplicate` | Same plan, system and exact (case-sensitive) name already in the plan, or earlier in the paste | no | no |
+| `unknownSystem` | System name not in the database | no | no |
+
+- **Plan regions**: every region containing a system in the plan's scopes (region, constellation or single-system), plus regions of systems with upgrades or a status set — the same set as the Region Map dropdown (`plans.matrix`). A plan with no regions treats every known system as `new`.
+- The import call receives `{ systemId, name, typeText }` per selected row and recomputes the type from `typeText` server-side. Duplicates are re-checked at import time (the plan may have changed since the review) and counted in `skippedDuplicates`.
+- Handler tests (`core/handlers/structures.test.ts`) run against Node's built-in `node:sqlite`, because the workspace's better-sqlite3 is compiled for Electron.
 
 ## Open questions / next steps
 
