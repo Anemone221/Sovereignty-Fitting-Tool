@@ -338,6 +338,8 @@ export interface MapSystemOverlay {
 export interface MapOverlayData {
     systems: MapSystemOverlay[];
     alnPairs: [number, number][];
+    /** Name and region of every system in alnPairs (for off-map bridge stubs). */
+    alnSystems: Record<number, { name: string; regionId: number; regionName: string }>;
     upgradeIcons: Record<string, string>;
 }
 
