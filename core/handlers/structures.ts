@@ -1,10 +1,16 @@
 import type {
     PlanStructure,
     StructureAddPayload,
+    StructureListImportResult,
     StructureLocation,
     StructureNode,
     StructureType,
 } from "@shared/index";
+import {
+    matchStructureKeyword,
+    parseStructureList,
+    typeFromColumn,
+} from '../import/structureListParser.js';
 import { register } from '../registerCore.js';
 import { getDb, type Db } from '../db/Db.js';
 import { getHost } from '../host.js';
@@ -63,38 +69,6 @@ function groupIntoNodes(rows: StructureDbRow[]): StructureNode[] {
         bySystem.get(row.system_id)!.structures.push(rowToStructure(row));
     }
     return Array.from(bySystem.values());
-}
-
-function inferType(line: string): {
-    structureType: StructureType;
-    location: StructureLocation | null;
-} {
-    const l = line.toLowerCase();
-    if (l.includes("keepstar"))
-        return { structureType: "Keepstar", location: "Deep" };
-    if (l.includes("fortizar"))
-        return { structureType: "Fortizar", location: "Deep" };
-    if (l.includes("astrahus"))
-        return { structureType: "Astrahus", location: "Deep" };
-    if (l.includes("azbel"))
-        return { structureType: "Azbel", location: "Deep" };
-    if (l.includes("raitaru"))
-        return { structureType: "Raitaru", location: "Deep" };
-    if (l.includes("tenebrex"))
-        return { structureType: "Tenebrex", location: "Deep" };
-    if (l.includes("pharolux"))
-        return { structureType: "Pharolux", location: "Deep" };
-    if (l.includes("ansiblex"))
-        return { structureType: "Ansiblex", location: "Gate" };
-    if (l.includes("metenox"))
-        return { structureType: "Metenox", location: "Moon" };
-    if (l.includes("athanor"))
-        return { structureType: "Athanor", location: "Moon" };
-    if (l.includes("tatara"))
-        return { structureType: "Tatara", location: "Moon" };
-    if (l.includes("sotiyo"))
-        return { structureType: "Sotiyo", location: "Deep" };
-    return { structureType: "Other", location: null };
 }
 
 function broadcastPlanChanged(planId: number): void {
@@ -205,13 +179,68 @@ export function registerStructuresHandlers(): void {
             let count = 0;
             db.transaction(() => {
                 for (const line of lines) {
-                    const { structureType, location } = inferType(line);
+                    const { structureType, location } = matchStructureKeyword(line);
                     ins.run(planId, systemId, structureType, line, location);
                     count++;
                 }
             })();
             if (count > 0) broadcastPlanChanged(planId);
             return { count };
+        },
+    );
+
+    // Plan-wide import of text copied from EVE's corporation Structures window.
+    // Only the system, name and Type column are used; duplicates (same plan,
+    // system and exact name) are skipped, including repeats within the paste.
+    register(
+        "structures.importStructureList",
+        (planId: number, text: string): StructureListImportResult => {
+            const db = getDb();
+            assertWritable(db, planId);
+            const rows = parseStructureList(text);
+
+            const findSystem = db.prepare(
+                "SELECT id FROM systems WHERE name = ? COLLATE NOCASE",
+            );
+            const existing = db.prepare(
+                "SELECT 1 FROM plan_structures WHERE plan_id = ? AND system_id = ? AND name = ?",
+            );
+            const ins = db.prepare(
+                `INSERT INTO plan_structures (plan_id, system_id, structure_type, name, location, source)
+         VALUES (?, ?, ?, ?, ?, 'clipboard')`,
+            );
+
+            const result: StructureListImportResult = {
+                imported: 0,
+                skippedDuplicates: 0,
+                unmatched: [],
+            };
+            db.transaction(() => {
+                for (const row of rows) {
+                    const system = findSystem.get(row.systemName) as
+                        | { id: number }
+                        | undefined;
+                    if (!system) {
+                        result.unmatched.push({
+                            line: row.line,
+                            systemName: row.systemName,
+                            name: row.name,
+                        });
+                        continue;
+                    }
+                    // Checked against the DB, which already includes rows
+                    // inserted earlier in this transaction.
+                    if (existing.get(planId, system.id, row.name)) {
+                        result.skippedDuplicates++;
+                        continue;
+                    }
+                    const { structureType, location } = typeFromColumn(row.typeText);
+                    ins.run(planId, system.id, structureType, row.name, location);
+                    result.imported++;
+                }
+            })();
+            if (result.imported > 0) broadcastPlanChanged(planId);
+            return result;
         },
     );
 

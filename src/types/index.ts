@@ -231,6 +231,13 @@ export interface PlanStructure {
     source: StructureSource;
 }
 
+export interface StructureListImportResult {
+    imported: number;
+    skippedDuplicates: number;
+    /** Structures whose system name was not found in the database. */
+    unmatched: { line: number; systemName: string; name: string }[];
+}
+
 export interface StructureAddPayload {
     structureType: StructureType;
     name?: string;
@@ -547,6 +554,11 @@ export interface EveSovApi {
             systemId: number,
             text: string,
         ) => Promise<{ count: number }>;
+        /** Plan-wide import of text copied from EVE's corporation Structures window. */
+        importStructureList: (
+            planId: number,
+            text: string,
+        ) => Promise<StructureListImportResult>;
         profitability: (structureId: number) => Promise<ProfitabilityResult | null>;
     };
     map: {

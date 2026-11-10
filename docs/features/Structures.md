@@ -30,14 +30,15 @@ CREATE INDEX IF NOT EXISTS idx_plan_structures_system
 - `structures.list(planId, systemId?)` → `StructureNode[]` — grouped tree; omit `systemId` for plan-wide view.
 - `structures.add(planId, systemId, structure)` → `{ id }` — inserts a row; broadcasts `plan-changed`.
 - `structures.remove(planId, structureId)` — deletes; broadcasts `plan-changed`.
-- `structures.importClipboard(planId, systemId, text)` → `{ count }` — parses EVE clipboard text, inserts rows; broadcasts `plan-changed`.
+- `structures.importClipboard(planId, systemId, text)` → `{ count }` — one structure name per line, all filed under `systemId`; type guessed from keywords in the name; broadcasts `plan-changed`.
+- `structures.importStructureList(planId, text)` → `{ imported, skippedDuplicates, unmatched }` — plan-wide import of text copied from EVE's corporation Structures window. See *Structure list import* below.
 - `structures.profitability(structureId)` → `ProfitabilityResult | null` — null if moon data or market prices are absent. Implemented in [electron/ipc/profitability.ts](../../electron/ipc/profitability.ts); applies the user-selected price field (`settings.marketSync.priceField`) and structure-specific refining efficiency (40% Metenox, 96% Athanor/Tatara) and fuel burn (5 fuel blocks/hr + 200 magmatic gas/hr for Metenox).
 
 ## Critical files
 
 - `src/panels/StructuresPage.tsx` — plan-wide tree view with profitability column.
 - `src/panels/SystemDetail.tsx` — per-system structure cards section; Sotiyo flag in header.
-- `src/data/structureParser.ts` — pure function: EVE clipboard text → `StructureImport[]`.
+- `core/import/structureListParser.ts` — pure parser for the Structures-window paste, plus the shared type keyword table. Tests: `structureListParser.test.ts` (`npm test`).
 - `electron/ipc/structures.ts` — all IPC handlers.
 - `electron/ipc/index.ts` — registers structures handlers.
 - `electron/preload.ts` — exposes `structures.*`.
@@ -53,6 +54,25 @@ CREATE INDEX IF NOT EXISTS idx_plan_structures_system
 - **Sotiyo flag**: in `SystemDetail`, if `structures.list(planId, systemId)` contains a `'Sotiyo'` entry AND the assigned upgrades include the Supercapital Production upgrade, a flag class is added to the system title. The flag propagates to the Universe tree via the existing `plan-changed` event.
 - **Profitability**: gated on `data.hasMarketData()`. If unavailable, the profitability cell shows "Enable Data Sync." The calculation uses moon ore composition from `moon_scans` × ore prices from the market data table.
 - The Structures page defaults to showing the active plan's structures. Passing `planId = null` would show all plans — not implemented initially; add if users need cross-plan views.
+
+## Structure list import
+
+Paste format (EVE corporation Structures window), per structure:
+
+```text
+State <TAB> Region <TAB> System      ← first line: exactly 3 non-empty tab parts
+Name                                 ← next non-empty line
+<Corp> logo / Corporation            (ignored)
+Type <TAB> Fuel <TAB> ...            ← first line with 2+ tab parts; part 1 = type
+Synced                               (ignored)
+```
+
+- Only the system, name and Type column are used. Fuel, state, corporation etc. are discarded.
+- **Type comes only from the Type column**, never the name. Missing or unrecognised → `Other` with no location.
+- **System** is looked up by name (`COLLATE NOCASE`). Unknown systems are returned in `unmatched` and not inserted.
+- **Duplicates** — same plan, system and exact (case-sensitive) name, including repeats within the paste — are skipped.
+- Inserted rows use `source = 'clipboard'`. One transaction; `plan-changed` broadcast only if something was imported.
+- UI: *Import structure list* button at the top of the Structures page.
 
 ## Open questions / next steps
 

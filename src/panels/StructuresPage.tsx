@@ -1,6 +1,7 @@
 import { evesov } from "@/api/evesov";
 import { useUi } from "@/state/uiStore";
 import type {
+    StructureListImportResult,
     StructureLocation,
     StructureNode,
     StructureType,
@@ -146,6 +147,7 @@ export function StructuresPage() {
 
     return (
         <div className="structures">
+            <StructureListImporter activePlanId={activePlanId} />
             {byConstellation.size === 0 && (
                 <p className="structures__empty">
                     No structures planned. Use the add button next to a system
@@ -378,6 +380,119 @@ export function StructuresPage() {
                     activePlanId={activePlanId}
                     onRefresh={refresh}
                 />
+            )}
+        </div>
+    );
+}
+
+function formatListImportResult(r: StructureListImportResult): string {
+    const parts = [`Imported ${r.imported}`];
+    if (r.skippedDuplicates > 0) {
+        parts.push(
+            `Skipped ${r.skippedDuplicates} duplicate${r.skippedDuplicates !== 1 ? "s" : ""}`,
+        );
+    }
+    if (r.unmatched.length > 0) {
+        parts.push(`${r.unmatched.length} unmatched`);
+    }
+    if (r.imported === 0 && r.skippedDuplicates === 0 && r.unmatched.length === 0) {
+        return "No structures found. Copy rows from EVE's corporation Structures window.";
+    }
+    return parts.join(" · ");
+}
+
+/**
+ * Plan-wide import of text copied from EVE's corporation Structures window.
+ * Each structure is filed under the system named in the paste; duplicates are
+ * skipped and unknown systems are listed for the user to fix by hand.
+ */
+function StructureListImporter({ activePlanId }: { activePlanId: number }) {
+    const [open, setOpen] = useState(false);
+    const [text, setText] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [result, setResult] = useState<StructureListImportResult | null>(
+        null,
+    );
+    const [error, setError] = useState<string | null>(null);
+
+    const commit = async () => {
+        setBusy(true);
+        setError(null);
+        try {
+            setResult(
+                await evesov.structures.importStructureList(activePlanId, text),
+            );
+        } catch (e) {
+            setResult(null);
+            setError(e instanceof Error ? e.message : String(e));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    if (!open) {
+        return (
+            <div className="structures__toolbar">
+                <button
+                    type="button"
+                    className="structures__btn-import"
+                    title="Import structures from EVE's corporation Structures window"
+                    onClick={() => setOpen(true)}
+                >
+                    ⎘ Import structure list
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="structures__import-form structures__import-form--list">
+            <textarea
+                rows={6}
+                placeholder="Paste rows copied from EVE's corporation Structures window"
+                value={text}
+                onChange={(e) => {
+                    setText(e.target.value);
+                    setResult(null);
+                    setError(null);
+                }}
+            />
+            <div className="structures__import-actions">
+                <button
+                    type="button"
+                    disabled={busy || !text.trim()}
+                    onClick={() => void commit()}
+                >
+                    Import
+                </button>
+                <button
+                    type="button"
+                    onClick={() => {
+                        setOpen(false);
+                        setText("");
+                        setResult(null);
+                        setError(null);
+                    }}
+                >
+                    Close
+                </button>
+                {result && (
+                    <span className="structures__import-result">
+                        {formatListImportResult(result)}
+                    </span>
+                )}
+                {error && (
+                    <span className="structures__import-error">{error}</span>
+                )}
+            </div>
+            {result && result.unmatched.length > 0 && (
+                <ul className="structures__import-unmatched">
+                    {result.unmatched.map((u) => (
+                        <li key={u.line}>
+                            Line {u.line}: unknown system “{u.systemName}” — {u.name}
+                        </li>
+                    ))}
+                </ul>
             )}
         </div>
     );
