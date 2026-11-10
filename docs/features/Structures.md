@@ -31,7 +31,8 @@ CREATE INDEX IF NOT EXISTS idx_plan_structures_system
 - `structures.add(planId, systemId, structure)` → `{ id }` — inserts a row; broadcasts `plan-changed`.
 - `structures.remove(planId, structureId)` — deletes; broadcasts `plan-changed`.
 - `structures.importClipboard(planId, systemId, text)` → `{ count }` — one structure name per line, all filed under `systemId`; type guessed from keywords in the name; broadcasts `plan-changed`.
-- `structures.importStructureList(planId, text)` → `{ imported, skippedDuplicates, unmatched }` — plan-wide import of text copied from EVE's corporation Structures window. See *Structure list import* below.
+- `structures.previewStructureList(planId, text)` → `StructureImportPreviewRow[]` — parses text copied from EVE's corporation Structures window and classifies each row for review. Writes nothing. See *Structure list import* below.
+- `structures.importStructureList(planId, items)` → `{ imported, skippedDuplicates }` — saves the reviewed rows the user selected; re-checks duplicates; broadcasts `plan-changed` if anything was imported.
 - `structures.profitability(structureId)` → `ProfitabilityResult | null` — null if moon data or market prices are absent. Implemented in [electron/ipc/profitability.ts](../../electron/ipc/profitability.ts); applies the user-selected price field (`settings.marketSync.priceField`) and structure-specific refining efficiency (40% Metenox, 96% Athanor/Tatara) and fuel burn (5 fuel blocks/hr + 200 magmatic gas/hr for Metenox).
 
 ## Critical files
@@ -70,10 +71,23 @@ Synced                               (ignored)
 - Columns may be separated by tabs (as EVE copies them) or by runs of 2+ spaces (as many editors and chat apps convert them).
 - Only the system, name and Type column are used. Fuel, state, corporation etc. are discarded.
 - **Type comes only from the Type column**, never the name. Missing or unrecognised → `Other` with no location.
-- **System** is looked up by name (`COLLATE NOCASE`). Unknown systems are returned in `unmatched` and not inserted.
-- **Duplicates** — same plan, system and exact (case-sensitive) name, including repeats within the paste — are skipped.
+- **System** is looked up by name (`COLLATE NOCASE`).
 - Inserted rows use `source = 'clipboard'`. One transaction; `plan-changed` broadcast only if something was imported.
-- UI: *Import structure list* button at the top of the Structures page.
+
+### Review step
+
+*Import structure list* (top of the Structures page) → paste → **Review** shows a table (status, region, system, type, name) with a checkbox per row. Nothing is saved until **Import N selected**.
+
+| Status | Meaning | Ticked by default | Selectable |
+| --- | --- | --- | --- |
+| `new` | Known system in one of the plan's regions, not yet in the plan | yes | yes |
+| `outsidePlan` | Known system whose region the plan does not cover | no | yes |
+| `duplicate` | Same plan, system and exact (case-sensitive) name already in the plan, or earlier in the paste | no | no |
+| `unknownSystem` | System name not in the database | no | no |
+
+- **Plan regions**: every region containing a system in the plan's scopes (region, constellation or single-system), plus regions of systems with upgrades or a status set — the same set as the Region Map dropdown (`plans.matrix`). A plan with no regions treats every known system as `new`.
+- The import call receives `{ systemId, name, typeText }` per selected row and recomputes the type from `typeText` server-side. Duplicates are re-checked at import time (the plan may have changed since the review) and counted in `skippedDuplicates`.
+- Handler tests (`core/handlers/structures.test.ts`) run against Node's built-in `node:sqlite`, because the workspace's better-sqlite3 is compiled for Electron.
 
 ## Open questions / next steps
 

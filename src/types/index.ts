@@ -231,11 +231,44 @@ export interface PlanStructure {
     source: StructureSource;
 }
 
+/**
+ * Review status of one structure from a pasted Structures-window list.
+ * - new: known system in one of the plan's regions, not yet in the plan
+ * - outsidePlan: known system whose region the plan does not cover
+ * - duplicate: same system + exact name already in the plan, or earlier in the paste
+ * - unknownSystem: system name not found in the database
+ */
+export type StructureImportStatus =
+    | "new"
+    | "outsidePlan"
+    | "duplicate"
+    | "unknownSystem";
+
+export interface StructureImportPreviewRow {
+    /** 1-based line number of the structure's first line in the paste. */
+    line: number;
+    systemName: string;
+    systemId: number | null;
+    regionName: string | null;
+    name: string;
+    /** Raw Type column text; null if the paste had none. */
+    typeText: string | null;
+    structureType: StructureType;
+    location: StructureLocation | null;
+    status: StructureImportStatus;
+}
+
+/** A reviewed row the user chose to import. */
+export interface StructureImportItem {
+    systemId: number;
+    name: string;
+    typeText: string | null;
+}
+
 export interface StructureListImportResult {
     imported: number;
+    /** Items that became duplicates between review and import. */
     skippedDuplicates: number;
-    /** Structures whose system name was not found in the database. */
-    unmatched: { line: number; systemName: string; name: string }[];
 }
 
 export interface StructureAddPayload {
@@ -554,10 +587,15 @@ export interface EveSovApi {
             systemId: number,
             text: string,
         ) => Promise<{ count: number }>;
-        /** Plan-wide import of text copied from EVE's corporation Structures window. */
-        importStructureList: (
+        /** Parses text copied from EVE's corporation Structures window for review. Writes nothing. */
+        previewStructureList: (
             planId: number,
             text: string,
+        ) => Promise<StructureImportPreviewRow[]>;
+        /** Saves the reviewed rows the user selected. Duplicates are re-checked and skipped. */
+        importStructureList: (
+            planId: number,
+            items: StructureImportItem[],
         ) => Promise<StructureListImportResult>;
         profitability: (structureId: number) => Promise<ProfitabilityResult | null>;
     };
