@@ -58,6 +58,58 @@ describe('parseStructureList', () => {
         expect(rows[2].typeText).toBe('Metenox Moon Drill');
     });
 
+    it('accepts runs of spaces instead of tabs', () => {
+        expect(parseStructureList(SAMPLE.replace(/\t/g, '    '))).toEqual(
+            parseStructureList(SAMPLE),
+        );
+    });
+
+    it('parses a space-separated paste with eight structures', () => {
+        const S = '    ';
+        const structure = (state: string, region: string, system: string, name: string, typeLine: string) => [
+            [state, region, system].join(S),
+            name,
+            'TEST Infrastructure as a Service logo',
+            'TEST Infrastructure as a Service',
+            typeLine,
+            'Synced',
+        ];
+        const text = [
+            ...SAMPLE.split('\n').slice(0, 16).map((l) => l.replace(/\t/g, S)),
+            ...structure('Shield (Vulnerable)', 'Pure Blind', 'B8EN-S', "B8EN-S - Squad V's Pain", ['Fortizar', '3w 5d 11h', 'No', 'No', '-', '-'].join(S)),
+            ...structure('Shield (Vulnerable)', 'Pure Blind', 'EL8-4Q', 'EL8-4Q - Constellation Center', ['Fortizar', '1mo 1w 3d', 'No', 'No', '-', '-'].join(S)),
+            ...structure('Shield (Vulnerable)', 'Pure Blind', 'RD-G2R', 'RD-G2R - Bin Chicken Cafe DO NOT USE', ['Fortizar', '3w 5d 2h', 'No', 'No', '2d 13h 36m', '-'].join(S)),
+            ...structure('Shield (Vulnerable)', 'Deklein', 'DKUK-G', 'DKUK-G - Tuda', ['Fortizar', '1w 4d 6h', 'No', 'No', '-', '-'].join(S)),
+            ...structure('Shield (Vulnerable)', 'Fade', 'E-9ORY', 'E-9ORY - Oxygen 4 All', ['Fortizar', '3w 3d 2h', 'No', 'No', '-', '-'].join(S)),
+            ...structure('Shield (Vulnerable)', 'Deklein', 'CCP-US', 'CCP-US - The Promised Land', ['Fortizar', '1w 1d 2h', 'No', 'No', '-', '-'].join(S)),
+            ...structure('Shield (Vulnerable)', 'Pure Blind', 'R-LW2I', 'R-LW2I - Eye of Sauron', ['Fortizar', '3w 3d 20h', 'No', 'No', '-', '-'].join(S)),
+            ...structure('Anchoring (Invulnerable)', 'Pure Blind', 'ZKYV-W', 'ZKYV-W - Dreddit is recruiting', ['Fortizar', '-', 'Yes', 'No', '22h 47m 6s', '-'].join(S)),
+        ].join('\n');
+
+        const rows = parseStructureList(text);
+        expect(rows.map((r) => [r.systemName, r.name, r.typeText])).toEqual([
+            ['B8EN-S', "B8EN-S - Squad V's Pain", 'Fortizar'],
+            ['EL8-4Q', 'EL8-4Q - Constellation Center', 'Fortizar'],
+            ['RD-G2R', 'RD-G2R - Bin Chicken Cafe DO NOT USE', 'Fortizar'],
+            ['DKUK-G', 'DKUK-G - Tuda', 'Fortizar'],
+            ['E-9ORY', 'E-9ORY - Oxygen 4 All', 'Fortizar'],
+            ['CCP-US', 'CCP-US - The Promised Land', 'Fortizar'],
+            ['R-LW2I', 'R-LW2I - Eye of Sauron', 'Fortizar'],
+            ['ZKYV-W', 'ZKYV-W - Dreddit is recruiting', 'Fortizar'],
+        ]);
+    });
+
+    it('keeps a double space inside a structure name', () => {
+        const text = [
+            'Shield (Vulnerable)    Deklein    CCP-US',
+            'CCP-US -  Promised Land',
+            'Fortizar    1w    No    No    -    -',
+        ].join('\n');
+        expect(parseStructureList(text)).toEqual([
+            { systemName: 'CCP-US', name: 'CCP-US -  Promised Land', typeText: 'Fortizar', line: 1 },
+        ]);
+    });
+
     it('returns nothing for the header block alone', () => {
         const header = SAMPLE.split('\n').slice(0, 16).join('\n');
         expect(parseStructureList(header)).toEqual([]);

@@ -12,12 +12,18 @@ import type { StructureLocation, StructureType } from "@shared/index";
  *   Type <TAB> Fuel <TAB> LP <TAB> ...       ← Type column used for the type
  *   Synced                                   (ignored)
  *
- * A structure starts on a line with exactly three tab-separated, non-empty
- * parts. The next non-empty line is the name. The first line after that with
- * two or more tab-separated parts is the Type/Fuel line, whose first part is
- * the type. Everything else (header labels, logo, corporation, fuel, state,
- * sync status) is ignored, so the parser does not depend on how many lines a
- * structure takes.
+ * Columns are separated by a tab, or by a run of two or more spaces: EVE
+ * copies with tabs, but editors and chat apps often turn them into spaces on
+ * the way. Single spaces are never a separator ("Shield (Vulnerable)",
+ * "Pure Blind"). Limitation: in a space-separated paste, a name containing two
+ * separate double spaces splits into three columns and is mistaken for a
+ * structure's first line; tab-separated pastes are unaffected.
+ *
+ * A structure starts on a line with exactly three non-empty columns. The next
+ * non-empty line is the name. The first line after that with two or more
+ * columns is the Type/Fuel line, whose first column is the type. Everything
+ * else (header labels, logo, corporation, fuel, state, sync status) is
+ * ignored, so the parser does not depend on how many lines a structure takes.
  */
 
 export interface ParsedStructureRow {
@@ -29,12 +35,14 @@ export interface ParsedStructureRow {
     line: number;
 }
 
-function tabParts(line: string): string[] {
-    return line.split("\t").map((p) => p.trim());
+const COLUMN_SEPARATOR = /\t| {2,}/;
+
+function columns(line: string): string[] {
+    return line.split(COLUMN_SEPARATOR).map((p) => p.trim());
 }
 
 function isFirstLine(line: string): boolean {
-    const parts = tabParts(line);
+    const parts = columns(line);
     return parts.length === 3 && parts.every((p) => p.length > 0);
 }
 
@@ -49,22 +57,24 @@ export function parseStructureList(text: string): ParsedStructureRow[] {
             continue;
         }
         const firstLineIndex = i;
-        const systemName = tabParts(lines[i])[2];
+        const systemName = columns(lines[i])[2];
 
-        // Name: next non-empty line, which must not contain a tab.
+        // Name: next non-empty line. It must not contain a tab or be another
+        // structure's first line. Runs of spaces are allowed, since a player
+        // may put a double space in a structure name.
         let j = i + 1;
         while (j < lines.length && lines[j] === "") j++;
-        if (j >= lines.length || lines[j].includes("\t")) {
+        if (j >= lines.length || lines[j].includes("\t") || isFirstLine(lines[j])) {
             i++;
             continue;
         }
         const name = lines[j];
 
-        // Type: first line with 2+ tab parts before the next structure's first line.
+        // Type: first line with 2+ columns before the next structure's first line.
         let typeText: string | null = null;
         let k = j + 1;
         while (k < lines.length && !isFirstLine(lines[k])) {
-            const parts = tabParts(lines[k]);
+            const parts = columns(lines[k]);
             if (parts.length >= 2) {
                 typeText = parts[0] || null;
                 k++;

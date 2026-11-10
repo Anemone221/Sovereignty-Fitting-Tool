@@ -67,6 +67,7 @@ Type <TAB> Fuel <TAB> ...            ← first line with 2+ tab parts; part 1 = 
 Synced                               (ignored)
 ```
 
+- Columns may be separated by tabs (as EVE copies them) or by runs of 2+ spaces (as many editors and chat apps convert them).
 - Only the system, name and Type column are used. Fuel, state, corporation etc. are discarded.
 - **Type comes only from the Type column**, never the name. Missing or unrecognised → `Other` with no location.
 - **System** is looked up by name (`COLLATE NOCASE`). Unknown systems are returned in `unmatched` and not inserted.
